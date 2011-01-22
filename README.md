@@ -5,7 +5,7 @@ Score! is a new programming language which aims to continue where [GOAL](http://
 left off (While GOAL is an acronym Score! is not but I figured it's better to have a name that 
 resembles GOAL and builds on it instead of calling it GOAL++ or GOAL#) so what is the aim of Score!?
 
-Here is a blogpost I did not long ago about Score! http://altdevblogaday.com/introducing-score
+Here is a blogpost I did not long ago about Score! [Introducing Score!](http://altdevblogaday.com/introducing-score) 
 
 Productivity
 ------------
