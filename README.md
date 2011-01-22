@@ -29,7 +29,7 @@ It will be possible to write high-level code in Score! but that is not the major
 Using inline assembler is supposed to be easy and well defined.
 
 Different targets, one tool-set
-===============================
+-------------------------------
 
 Say that you want to run some vu0 code on you ps2, it needs to be compiled separately, 
 linked and brought it as an "extern "C" g_myVu0Program" or something similar. 
@@ -37,29 +37,29 @@ The chain usually hinders productivity as it adds several steps the programmer n
 to take to actually do something. What you actually want to do is 
 (pesudo code, don't take this as final in any way)
 
-(def-vu0-fun vu0-fun (input1 :in vf01                      
-                      input2 :in vf02                      
-                      output :out vf03)  
-  (add output input1 input2))
+	(def-vu0-fun vu0-fun (input1 :in vf01                      
+   	                   input2 :in vf02                      
+   	                   output :out vf03)  
+  	(add output input1 input2))
 
  
-(defun my-ee-fun ()  
-  ; do something funky, set stuff etc and then call the code  
-  (vu0-fun))
+	(defun my-ee-fun ()  
+  	; do something funky, set stuff etc and then call the code  
+  	(vu0-fun))
 
 Also the same way would be possible on PS3 when running a SPU program from the PPU.
 
-(def-spu-fun spu-fun (data :u32)  
-  (spu-format "~d~%" data)
+	(def-spu-fun spu-fun (data :u32)  
+  	(spu-format "~d~%" data)
 
-(defun my-ppu-fun ()  
-  (spu-fun 0)) ; scheduling, etc is up to the implementation
+	(defun my-ppu-fun ()  
+  	(spu-fun 0)) ; scheduling, etc is up to the implementation
 
 On PC your OpenCL programs can be checked at compile time instead 
 of you getting some run-time error later.
 
 Produce code to back-end/assembler
-==================================
+----------------------------------
 
 Score! should be able to support different targets but yet can be tailored to 
 the way you want it to behave. For example it would be possible to support LLVM 
