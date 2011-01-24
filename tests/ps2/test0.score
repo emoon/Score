@@ -1,0 +1,6 @@
+
+(def-ee-fun ee-test ()
+	(sub x y z)
+	(mul x y z)
+	(div x y z)
+	(add x y z))
