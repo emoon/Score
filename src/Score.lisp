@@ -260,8 +260,43 @@
 						 (psrlvw #b111101 :psll-type)
 						 (psrlw #b111101 :psll-type)
 					
+						 ;; Float ops
 
+						 (abs.s   #b000101 :f0-type)
+						 (add.s   #b000000 :f1-type)
+						 (adda.s  #b000000 :f2-type)
+						 (div.s   #b000011 :ft-type)
+						 (lwc1    #b110001 :ls-type)
+						 (madd.s  #b000000 :f1-type)
+						 (madda.s #b000000 :f2-type)
+						 (max.s   #b000000 :f1-type)
+						 (min.s   #b000000 :f1-type)
+						 (msub.s  #b000000 :f1-type)
+						 (msuba.s #b000000 :f2-type)
+						 (mul.s   #b000000 :f1-type)
+						 (mula.s  #b000000 :f2-type)
+						 (suba.s  #b000000 :f2-type)
+						 (swc1    #b111001 :ls-type)
 
+						 (c.eq.s  #b011010 :fcmp-type)
+						 (c.f.s   #b011000 :fcmp-type)
+						 (c.le.s  #b011011 :fcmp-type)
+						 (c.lt.s  #b011010 :fcmp-type)
+
+						 (cvt.s.w #b100000 :fcon-type)
+						 (cvt.w.t #b100100 :fcon-type)
+
+						 (bc1f    #b000000 :fbranch-type)
+						 (bc1fl   #b000010 :fbranch-type)
+						 (bc1t    #b000001 :fbranch-type)
+						 (bc1tl   #b000011 :fbranch-type)
+
+						 (mov.s   #b000000 :fmov-type)
+						 (mfc1    #b000000 :fftc1-type)
+						 (mtc1    #b000100 :fftc1-type)
+
+						 (rsqrt.s #b000000 :frsqrt-type)
+						 (sqrt.s  #b000000 :fsqrt-type)
 
 
 
