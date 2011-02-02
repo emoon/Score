@@ -134,10 +134,12 @@
 						 (mthi #b010000 :mthl-type)
 						 (mtlo #b010010 :mthl-type)
 
-						 ;; multiply
+						 ;; multiply / divide
 
-						 (mult  #b011000 :mul-type)
-						 (multu #b011000 :mul-type)
+						 (mult  #b011000 :md-type)
+						 (multu #b011001 :md-type)
+						 (div  #b011010 :md-type)
+						 (divu #b011011 :md-type)
 
 						 ;; sync
 
@@ -162,5 +164,110 @@
 
 						 (pref #b110011 :pref-type)
 						 (syscall #b001100 :syscall-type)
+
+						 ;; MMI instructions
+
+						 (paddb  #b01000 :mmi0-type)
+						 (paddh  #b00100 :mmi0-type)
+						 (paddsb #b11000 :mmi0-type)
+						 (paddsh #b10100 :mmi0-type)
+						 (paddsw #b11000 :mmi0-type)
+						 (paddw  #b00100 :mmi0-type)
+						 (pcgtb  #b01010 :mmi0-type)
+						 (pcgth  #b00110 :mmi0-type)
+						 (pcgtw  #b00100 :mmi0-type)
+						 (pext5  #b11110 :mmi0-type)
+						 (pextlb #b11010 :mmi0-type)
+						 (pextlh #b10110 :mmi0-type)
+						 (pextlw #b10010 :mmi0-type)
+						 (pmaxh  #b00111 :mmi0-type)
+						 (pmaxw  #b00011 :mmi0-type)
+						 (ppac5  #b11111 :mmi0-type)
+						 (ppacb  #b11011 :mmi0-type)
+						 (ppach  #b10111 :mmi0-type)
+						 (ppacw  #b10011 :mmi0-type)
+						 (psubb  #b01001 :mmi0-type)
+						 (psubh  #b00101 :mmi0-type)
+						 (psubsb #b11001 :mmi0-type)
+						 (psubsh #b10101 :mmi0-type)
+						 (psubsw #b10001 :mmi0-type)
+						 (psubw  #b00001 :mmi0-type)
+
+						 (pabsh  #b00101 :mmi1-type)
+						 (pabsw  #b00001 :mmi1-type)
+						 (paddub #b11000 :mmi1-type)
+						 (padduh #b10100 :mmi1-type)
+						 (padduw #b10000 :mmi1-type)
+						 (padsbh #b00100 :mmi1-type)
+						 (pceqb  #b01010 :mmi1-type)
+						 (pceqh  #b00110 :mmi1-type)
+						 (pceqw  #b00010 :mmi1-type)
+						 (pextub #b11010 :mmi1-type)
+						 (pextuh #b10110 :mmi1-type)
+						 (pextuw #b10010 :mmi1-type)
+						 (pminh  #b00111 :mmi1-type)
+						 (pminw  #b00011 :mmi1-type)
+						 (psubub #b11001 :mmi1-type)
+						 (psubuh #b10101 :mmi1-type)
+						 (psubuw #b10001 :mmi1-type)
+						 (qfsrv  #b11011 :mmi1-type)
+
+						 (pand   #b10010 :mmi2-type)
+						 (pcpyld #b01110 :mmi2-type)
+						 (pdivbw #b11101 :mmi2-type)
+						 (pexeh  #b11010 :mmi2-type)
+						 (pexew  #b11110 :mmi2-type)
+						 (phmadh #b10001 :mmi2-type)
+						 (phmsbh #b10101 :mmi2-type)
+						 (pinth  #b01010 :mmi2-type)
+						 (pmaddh #b10000 :mmi2-type)
+						 (pmaddw #b00000 :mmi2-type)
+						 (pmfhi  #b01000 :mmi2mh-type)
+						 (pmflo  #b01001 :mmi2mh-type)
+						 (pmsubh #b10100 :mmi2-type)
+						 (pmsubw #b00100 :mmi2-type)
+						 (pmulth #b11100 :mmi2-type)
+						 (pmultw #b01100 :mmi2-type)
+						 (prevh  #b11011 :mmi2n-type)
+						 (prot3w #b11111 :mmi2n-type)
+						 (psllvw #b00010 :mmi2-type)
+						 (psrlvw #b00011 :mmi2-type)
+						 (pxor   #b01001 :mmi2-type)
+
+						 (pmfhl.lh  #b110011 :pmfhl-type)
+						 (pmfhl.lw  #b110000 :pmfhl-type)
+						 (pmfhl.sh  #b110100 :pmfhl-type)
+						 (pmfhl.slw #b110010 :pmfhl-type)
+						 (pmfhi.uw  #b110001 :pmfhl-type)
+
+						 (pmthi		#b10000 :pmthi-type)
+						 (pmthi.lw	#b10000 :pmthi.lw-type)
+						 (pmtlo		#b10001 :pmtlo-type)
+
+						 (pcpyh  #b11001 :mmi3-type)
+						 (pcpyud #b01110 :mmi3-type)
+						 (pdivw  #b01101 :pdiv-type)
+						 (pdivuw #b01001 :pdiv-type)
+						 (pexch  #b11010 :mmi3n-type)
+						 (pexcw  #b11110 :mmi3n-type)
+						 (pinteh #b01010 :mmi3-type)
+						 (pmadduw #b00000 :mmi3-type)
+
+						 (psllh #b111100 :psll-type)
+						 (psllw #b111101 :psll-type)
+						 (psravw #b111101 :psll-type)
+						 (psrlh #b111101 :psll-type)
+						 (psrlvw #b111101 :psll-type)
+						 (psrlw #b111101 :psll-type)
+					
+
+
+
+
+
+
+
+
+
 
 
