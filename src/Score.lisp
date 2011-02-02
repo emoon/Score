@@ -298,6 +298,41 @@
 						 (rsqrt.s #b000000 :frsqrt-type)
 						 (sqrt.s  #b000000 :fsqrt-type)
 
+						 ;; cop-0 instructions (section non-functional but here to be implemented)
+
+						 (bc0f    #b000000 :b0-type)
+						 (bc0fl   #b000000 :b0-type)
+						 (bc0t    #b000000 :b0-type)
+						 (bc0tl   #b000000 :b0-type)
+
+						 (cache   #b0000000 :cache-type)
+						 (di	  #b1111001 :i-type)
+						 (ei	  #b1111000 :i-type)
+						 (eret	  #b0111000 :i-type)
+
+						 (mfbpc   #b0000000 :mf-type)
+						 (mfc0    #b0000000 :mf-type)
+						 (mfdab   #b0000000 :mf-type)
+						 (mfdabm  #b0000000 :mf-type)
+						 (mfdvb   #b0000000 :mf-type)
+						 (mfdvbm  #b0000000 :mf-type)
+						 (mfiab   #b0000000 :mf-type)
+						 (mfiabm  #b0000000 :mf-type)
+						 (mfpc    #b0000000 :mf-type)
+						 (mfps    #b0000000 :mf-type)
+						 (mtc0    #b0000000 :mf-type)
+						 (mtdab   #b0000000 :mf-type)
+						 (mtdabm  #b0000000 :mf-type)
+						 (mtdvb   #b0000000 :mf-type)
+						 (mtdvbm  #b0000000 :mf-type)
+						 (mtiab   #b0000000 :mf-type)
+						 (mtiabm  #b0000000 :mf-type)
+
+						 (tbpl    #b0000000 :tlb-type)
+						 (tlbr    #b0000000 :tlb-type)
+						 (tlwi    #b0000000 :tlb-type)
+						 (tlwr    #b0000000 :tlb-type)
+
 
 
 
