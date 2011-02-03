@@ -29,14 +29,18 @@
 
 (defmacro make-ee-registers-hash ()
   (let ((hash (make-hash-table :test #'eq)))
-	(loop for i from 0 to 31 collecting (setf (gethash (intern (format nil "r~d" i)) hash) t)) hash))
+	(loop for i from 0 to 31 collecting (setf (gethash (intern (format nil "R~d" i)) hash) t)) hash))
 
-(defvar *ee-registers2* (make-ee-registers-hash)) 
+(defvar *ee-registers* (make-ee-registers-hash)) 
 
-(defmacro def-ee-instruction-type (types &body body)
-  `(let ((func #'(lambda (opcode instruction stream) ,@body)))
-     (dolist (type ',types)
-       (setf (gethash type *mips-instruction-types*) func))))
+(defun print-hash-entry (key value)
+    (format t "The value associated with the key ~S is ~S~%" key value))
+
+;;; si-type of opcode 
+;;; expected input is 3 rt, rs, <immidiate> 
+
+(defun :si-type (opcode arguments)
+  (format t "~d~d" opcode arguments))
 
 (defparameter *mips-instructions* 
    					   '((addi   #b001000 :si-type)
