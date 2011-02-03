@@ -3,7 +3,7 @@
 
 (defun read-score-file (filename)
 	(with-open-file (stream filename)
-		(let ((end (gensym end)))
+		(let ((end (gensym "end")))
 			(loop for i = (read stream nil end)
 				while (not (eq i end)) collect i)))) 
 
@@ -21,14 +21,25 @@
 						; here we can start pushing out the instructions but just printing now
 						(print i)))))))
 
-
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Implementing the mips (r5900 assembler here)
 ;;;
 ;;; Loots of testing / hacking around currently
 ;;;
 
-(def-mips-instructions '((addi   #b001000 :si-type)
+(defmacro make-ee-registers-hash ()
+  (let ((hash (make-hash-table :test #'eq)))
+	(loop for i from 0 to 31 collecting (setf (gethash (intern (format nil "r~d" i)) hash) t)) hash))
+
+(defvar *ee-registers2* (make-ee-registers-hash)) 
+
+(defmacro def-ee-instruction-type (types &body body)
+  `(let ((func #'(lambda (opcode instruction stream) ,@body)))
+     (dolist (type ',types)
+       (setf (gethash type *mips-instruction-types*) func))))
+
+(defparameter *mips-instructions* 
+   					   '((addi   #b001000 :si-type)
 						 (addiu  #b001001 :lui-type)
 						 (andi   #b001100 :si-type)
 						 (daddi  #b011000 :si-type)
@@ -331,7 +342,7 @@
 						 (tbpl    #b0000000 :tlb-type)
 						 (tlbr    #b0000000 :tlb-type)
 						 (tlwi    #b0000000 :tlb-type)
-						 (tlwr    #b0000000 :tlb-type)
+						 (tlwr    #b0000000 :tlb-type)))
 
 
 
