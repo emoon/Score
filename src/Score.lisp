@@ -46,7 +46,7 @@
 ;;; si-type of opcode 
 ;;; expected input is 3 rt, rs, <immidiate> 
 
-(defun :si-type (stream instruction arguments)
+(defun si-type (stream instruction arguments)
 	(when (not (equal (length arguments) 4))
 		(error (format nil "Expected 4 arguments si-type <operand> rt, rs, <immediate> was given ~{~a~^, ~}" arguments)))
 	(let ((rt (gethash (nth 1 arguments) *ee-registers*)) ; todo: move this out
@@ -62,7 +62,37 @@
 													 (ash rt 16)
 													 (nth 3 arguments)) 4)))
 
-(defparameter *mips-instructions* 
+;;; List over all ee - instructions
+
+(defun make-ee-instruction (name opcode func) 
+		(setf (gethash name *mips-instructions*) (list opcode func)))
+
+; (defun make-ee-instructions (instruction-list)
+;   (let ((instruction-table (make-hash-table :test #'eq)))
+; 		(loop for i in instruction-list do 
+; 		  (format t "~{~a~^, ~}~%" i)
+; 			(setf (gethash (first i) instruction-table) (nthcdr 1 i)))
+; 		instruction-table))
+
+(defun encode-ee-instruction (stream instruction)
+	(let ((instruction-info (gethash (first instruction) *mips-instructions*)))
+		(when (not instruction-info)
+			(error (format nil "Invalid instruction name ~{~a~^, ~}" instruction)))
+		(funcall (second instruction-info) stream (first instruction-info) instruction)))
+
+(defparameter *mips-instructions* (make-hash-table :test #'eq))
+
+(make-ee-instruction 'addi  #b001000 #'si-type) 
+(make-ee-instruction 'andi  #b011000 #'si-type) 
+(make-ee-instruction 'daddi #b011000 #'si-type) 
+(make-ee-instruction 'slti  #b001010 #'si-type) 
+
+;(defparameter *mips-instructions* (make-ee-instructions '((addi  #b001000 #'si-type) 
+;																													(andi  #b001100 #'si-type) 
+;																													(daddi #b011000 #'si-type) 
+;																													(slti  #b001010 #'si-type))))
+
+(defparameter *mips-instructions-temp* 
    					   '((addi   #b001000 :si-type)
 						 (addiu  #b001001 :lui-type)
 						 (andi   #b001100 :si-type)
