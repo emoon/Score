@@ -29,18 +29,38 @@
 
 (defmacro make-ee-registers-hash ()
   (let ((hash (make-hash-table :test #'eq)))
-	(loop for i from 0 to 31 collecting (setf (gethash (intern (format nil "R~d" i)) hash) t)) hash))
+		(loop for i from 0 to 31 collecting (setf (gethash (intern (format nil "R~d" i)) hash) i)) hash))
 
-(defvar *ee-registers* (make-ee-registers-hash)) 
+(defparameter *ee-registers* (make-ee-registers-hash)) 
 
 (defun print-hash-entry (key value)
     (format t "The value associated with the key ~S is ~S~%" key value))
 
+;;; write value to the stream
+
+(defun write-value (stream value byte-count)
+	(format t "Writing value #x~x" value)
+  (loop for i from 0 to (1- byte-count)
+	  do (write-byte (ldb (byte 8 (* 8 i)) value) stream)))
+
 ;;; si-type of opcode 
 ;;; expected input is 3 rt, rs, <immidiate> 
 
-(defun :si-type (opcode arguments)
-  (format t "~d~d" opcode arguments))
+(defun :si-type (stream instruction arguments)
+	(when (not (equal (length arguments) 4))
+		(error (format nil "Expected 4 arguments si-type <operand> rt, rs, <immediate> was given ~{~a~^, ~}" arguments)))
+	(let ((rt (gethash (nth 1 arguments) *ee-registers*)) ; todo: move this out
+			  (rs (gethash (nth 2 arguments) *ee-registers*)))
+		(when (not rt)
+			(error (format nil "Invalid register name for rt ~s" (nth 1 arguments))))
+		(when (not rs)
+			(error (format nil "Invalid register name for rs ~s" (nth 2 arguments))))
+		(when (not (numberp (nth 3 arguments)))
+			(error (format nil "Invalid immediate ~s" (nth 3 arguments))))
+		(write-value stream (+ (ash instruction 26) 
+													 (ash rs 21)
+													 (ash rt 16)
+													 (nth 3 arguments)) 4)))
 
 (defparameter *mips-instructions* 
    					   '((addi   #b001000 :si-type)
