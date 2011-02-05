@@ -43,174 +43,247 @@
   (loop for i from 0 to (1- byte-count)
 	  do (write-byte (ldb (byte 8 (* 8 i)) value) stream)))
 
-;;; si-type of opcode 
-;;; expected input is 3 rt, rs, <immidiate> 
+; info about how to encode the function
 
-(defun si-type (stream instruction arguments)
-	(when (not (equal (length arguments) 4))
-		(error (format nil "Expected 4 arguments si-type <operand> rt, rs, <immediate> was given ~{~a~^, ~}" arguments)))
-	(let ((rt (gethash (nth 1 arguments) *ee-registers*)) ; todo: move this out
+(defstruct encoding inst spec rd rs rt imm func)
+
+;; binds and valdiats rt and rs
+
+(defun validate-rt-rs (arguments)
+	(let ((rt (gethash (nth 1 arguments) *ee-registers*)) 
 			  (rs (gethash (nth 2 arguments) *ee-registers*)))
 		(when (not rt)
 			(error (format nil "Invalid register name for rt ~s" (nth 1 arguments))))
 		(when (not rs)
 			(error (format nil "Invalid register name for rs ~s" (nth 2 arguments))))
+		(values rt rs)))
+
+;; binds and valdiats rd, rs and rt 
+
+(defun validate-rd-rt-rs (arguments)
+	(let ((rd (gethash (nth 1 arguments) *ee-registers*)) 
+			  (rs (gethash (nth 2 arguments) *ee-registers*))
+			  (rt (gethash (nth 3 arguments) *ee-registers*)))
+		(when (not rd)
+			(error (format nil "Invalid register name for rd ~s" (nth 1 arguments))))
+		(when (not rs)
+			(error (format nil "Invalid register name for rs ~s" (nth 2 arguments))))
+		(when (not rt)
+			(error (format nil "Invalid register name for rt ~s" (nth 3 arguments))))
+		(values rd rs rt)))
+
+
+;;; instruction type 0
+;;;
+;;; <operand> <register>, <register>, <immediate>
+;;;
+
+(defun inst-type0 (stream instruction arguments enc)
+	(when (not (equal (length arguments) 4))
+		(error (format nil "Expected 4 arguments si-type <operand> rt, rs/base, <immediate> was given ~{~a~^, ~}" arguments)))
+	(multiple-value-bind (rt rs) (validate-rt-rs arguments)
 		(when (not (numberp (nth 3 arguments)))
 			(error (format nil "Invalid immediate ~s" (nth 3 arguments))))
-		(write-value stream (+ (ash instruction 26) 
-													 (ash rs 21)
-													 (ash rt 16)
-													 (nth 3 arguments)) 4)))
+		(write-value stream (logior (ash instruction (encoding-inst enc)) 
+																(ash rs (encoding-rs enc))
+																(ash rt (encoding-rt enc))
+																(ash (nth 3 arguments) (encoding-imm enc))) 4)))
+
+;;; instruction type 1
+;;; 
+;;; <operand> <register>, <register>, <register> 
+;;;
+
+(defun inst-type1 (stream instruction special-value arguments enc) 
+	(when (not (equal (length arguments) 4))
+		(error (format nil "Expected 4 arguments si-type <operand> rd, rs, rt, was given ~{~a~^, ~}" arguments)))
+	(multiple-value-bind (rd rt rs) (validate-rd-rt-rs arguments)
+		(write-value stream (logior (ash special-value (encoding-spec enc)) 
+																(ash rs (encoding-rs enc))
+																(ash rt (encoding-rt enc))
+																(ash rd (encoding-rd enc))
+																(ash instruction (encoding-inst enc))) 4)))
+
+;;; instruction type 2
+;;; 
+;;; <operand> <register>, <immediate> 
+;;;
+
+(defun inst-type2 (stream instruction arguments enc)
+	(when (not (equal (length arguments) 3))
+		(error (format nil "Expected 3 arguments si-type <operand> rt, rs/base, <immediate> was given ~{~a~^, ~}" arguments)))
+	(let (rs (gethash (first arguments) *ee-registers*))
+		(when (not rs)
+			(error (format nil "Invalid register name for rt ~s" (first arguments))))
+		(when (not (numberp (nth 2 arguments)))
+			(error (format nil "Invalid immediate ~s" (nth 2 arguments))))
+		(write-value stream (logior (ash instruction (encoding-inst enc)) 
+																(ash rs (encoding-rs enc))
+																(ash (nth 2 arguments) (encoding-imm enc))) 4)))
+
+;;; instruction type 3
+;;; 
+;;; <operand> <immediate> 
+;;;
+
+(defun inst-type3 (stream instruction arguments enc)
+	(when (not (equal (length arguments) 2))
+		(error (format nil "Expected 2 arguments <operand> <immediate> was given ~{~a~^, ~}" arguments)))
+	(when (not (numberp (nth 1 arguments)))
+		(error (format nil "Invalid immediate ~s" (nth 1 arguments))))
+	(write-value stream (logior (ash instruction (encoding-inst enc)) 
+															(ash (nth 1 arguments) (encoding-imm enc))) 4))
+
+;;; instruction type 4
+;;;
+;;; <operand> <register>, <register>
+;;;
+
+(defun inst-type4 (stream instruction arguments enc)
+	(when (not (equal (length arguments) 3))
+		(error (format nil "Expected 3 arguments si-type <operand> rt, rs/base, <immediate> was given ~{~a~^, ~}" arguments)))
+	(multiple-value-bind (rt rs) (validate-rt-rs arguments)
+		(write-value stream (logior (ash instruction (encoding-inst enc)) 
+																(ash rs (encoding-rs enc))
+																(ash rt (encoding-rt enc))) 4)))
+
+;;; instruction type 5
+;;; 
+;;; <operand> <register>
+;;;
+
+(defun inst-type5 (stream instruction arguments enc)
+	(when (not (equal (length arguments) 2))
+		(error (format nil "Expected 2 arguments si-type <operand> rt, rs/base, <immediate> was given ~{~a~^, ~}" arguments)))
+	(let (rt (gethash (first arguments) *ee-registers*))
+		(when (not rt)
+			(error (format nil "Invalid register name for rt ~s" (first arguments))))
+		(write-value stream (logior (ash instruction (encoding-inst enc)) 
+																(ash rt (encoding-rt enc))) 4)))
+;;; instruction type 6
+;;; 
+;;; <operand> 
+;;;
+
+(defun inst-type6 (stream instruction arguments enc)
+	(when (not (equal (length arguments) 1))
+		(error (format nil "Expected 1 arguments si-type <operand> rt, rs/base, <immediate> was given ~{~a~^, ~}" arguments)))
+		(write-value stream ((ash instruction (encoding-inst enc))) 4))
 
 ;;; List over all ee - instructions
 
-(defun make-ee-instruction (name opcode func) 
-		(setf (gethash name *mips-instructions*) (list opcode func)))
+(defun make-ee-instructions (enc opcode-list) 
+	(loop for i in opcode-list do 
+		(setf (gethash (first i) *mips-instructions*) (list (second i) enc))))
 
-; (defun make-ee-instructions (instruction-list)
-;   (let ((instruction-table (make-hash-table :test #'eq)))
-; 		(loop for i in instruction-list do 
-; 		  (format t "~{~a~^, ~}~%" i)
-; 			(setf (gethash (first i) instruction-table) (nthcdr 1 i)))
-; 		instruction-table))
+;;; instruction encoding
 
 (defun encode-ee-instruction (stream instruction)
 	(let ((instruction-info (gethash (first instruction) *mips-instructions*)))
 		(when (not instruction-info)
 			(error (format nil "Invalid instruction name ~{~a~^, ~}" instruction)))
-		(funcall (second instruction-info) stream (first instruction-info) instruction)))
+		(funcall (encoding-func (second instruction-info)) stream (first instruction-info) instruction (second instruction-info))))
 
 (defparameter *mips-instructions* (make-hash-table :test #'eq))
 
-(make-ee-instruction 'addi  #b001000 #'si-type) 
-(make-ee-instruction 'andi  #b011000 #'si-type) 
-(make-ee-instruction 'daddi #b011000 #'si-type) 
-(make-ee-instruction 'slti  #b001010 #'si-type) 
+;;
+;; Type 0 instructions 
+;; <operand> <register>, <register>, <immediate>
+;;
 
-;(defparameter *mips-instructions* (make-ee-instructions '((addi  #b001000 #'si-type) 
-;																													(andi  #b001100 #'si-type) 
-;																													(daddi #b011000 #'si-type) 
-;																													(slti  #b001010 #'si-type))))
+(make-ee-instructions (make-encoding :inst 26 :rs 21 :rt 16 :imm 0 :func #'inst-type0)
+											'((addi #b001000) (addiu #b001001) (andi #b001100) (daddi #b011000) (daddiu #b011001)
+											  (lui  #b001111) (ori   #b001101) (slti #b001010) (sltiu #b001011) (xori   #b001110)
+
+												;; load and store instructions
+ 												
+												(lb  #b100000) (lbu #b100100) (ld  #b110111) (ldl #b011010) (ldr #b011011)
+												(lwl #b100010) (lh  #b100000) (lhu #b100001) (lw  #b100011) (lq  #b011110)
+												(lwl #b100010) (lwr #b100110) (lwu #b100111)
+												(sb  #b101000) (sd  #b111111) (sdl #b101100) (sdr #b101101) (sh  #b101001)
+												(sw  #b101011) (swl #b101010) (swr #b101110) (sq  #b011111)
+
+												;; some branches
+												
+											  (beq  #b000100) (beql #b000100) (bne  #b000101) (bnel #b010101)))
+
+;;
+;; Type 0 instructions (shift) (encoding actually uses rd, rt but we use rt, rs as as it looks the same at callsite
+;;
+
+(make-ee-instructions (make-encoding :spec 0 :inst 0 :rs 16 :rt 11 :imm 5 :func #'inst-type1)
+											'((dsll   #b111000) (dsll32 #b111100) (dsra   #b111011) 
+												(dsra32 #b111111) (drsl   #b111010) (drsl32 #b111110)
+										    (sll    #b000000) (sra    #b000011) (srl    #b000010)))
+
+;;
+;; Type 1 instructions 
+;;; <operand> <register>, <register>, <register> 
+;;
+
+(make-ee-instructions (make-encoding :spec 0 :inst 0 :rs 21 :rt 16 :rd 11 :func #'inst-type1)
+											'((add   #b100000) (addu  #b100001) (and   #b100100) (dadd  #b101100) (daddu #b101101) 
+												(dsllv #b010100) (dsrav #b010111) (dsrlv #b010110) (dsub  #b101110) (dsubu #b101111)
+												(movn  #b001011) (movz  #b001010) (nor   #b100111) (or    #b100101)
+												(sllv  #b000100) (slt   #b101010) (sltu  #b101011) (srav  #b000111) (srlv  #b000110)
+												(sub   #b100010) (subu  #b100011) (xor   #b100110)))
+
+;;
+;; Type 2 instructions 
+;; <operand> <register>, <immediate> 
+;;
+
+(make-ee-instructions (make-encoding :spec 1 :inst 16 :rs 21 :imm 0 :func #'inst-type2)
+											'((bgez #b00001) (bgezal #b10001) (bgezall #b10011) (bgezl #b00011)
+						 						(bltz #b00000) (bltzal #b10000) (bltzall #b10010) (bltzl #b00010)))
+
+(make-ee-instructions (make-encoding :spec 1 :inst 16 :rs 21 :imm 0 :func #'inst-type2)
+											'((bgtz #b000111) (bgtzl #b010111) (blez #b000110) (blezl #b010110)))
+
+(make-ee-instructions (make-encoding :spec 0 :inst 0 :rs 21 :func #'inst-type2)
+											'((jr #b001000))) 
+
+;;
+;; Type 3 instructions 
+;;; <operand> <immediate> 
+;;
+
+(make-ee-instructions (make-encoding :inst 26 :imm 0 :func #'inst-type3)
+											'((j #b00010) (jal #b00011)))
+
+;;
+;; Type 4 instructions 
+;; <operand> <register>, <register>
+;;
+
+(make-ee-instructions (make-encoding :rs 21 :rt 11 :func #'inst-type4) 
+											'((jalr #b001001)))
+
+(make-ee-instructions (make-encoding :rs 21 :rt 16 :func #'inst-type4) 
+						 				  '((mult #b011000) (multu #b011001) 
+												(div  #b011010) (divu #b011011)))
+
+;;
+;; Type 5 instructions 
+;;; <operand> <register>
+;;
+
+(make-ee-instructions (make-encoding :rt 11 :func #'inst-type5) 
+											 '((mfhi #b010000) (mflo #b010010)))
+
+(make-ee-instructions (make-encoding :rt 21 :func #'inst-type5) 
+											 '((mthi #b010000) (mtlo #b010010)))
+
+;;
+;; Type 6 instructions 
+;;; <operand> 
+;;
+
+(make-ee-instructions (make-encoding :inst 0 :func #'inst-type6) 
+											 '((sync #b001111) (sync.l #b001111) (sync.p #b101111)
 
 (defparameter *mips-instructions-temp* 
-   					   '((addi   #b001000 :si-type)
-						 (addiu  #b001001 :lui-type)
-						 (andi   #b001100 :si-type)
-						 (daddi  #b011000 :si-type)
-						 (daddiu #b011001 :lui-type)
-						 (lui    #b001111 :lui-type)
-						 (ori    #b001101 :ui-type)
-						 (slti   #b001010 :si-type)
-						 (sltiu  #b001011 :ui-type)
-						 (xori   #b001110 :ui-type)
-
-						 ;; Load / store instructions
-
-						 (lb  #b100000 :ls-type)
-						 (lbu #b100100 :ls-type)
-						 (ld  #b110111 :ls-type)
-						 (ldl #b011010 :ls-type)
-						 (ldr #b011011 :ls-type)
-						 (lwl #b100010 :ls-type)
-						 (lh  #b100000 :ls-type)
-						 (lhu #b100001 :ls-type)
-						 (lw  #b100011 :ls-type)
-						 (lq  #b011110 :ls-type)
-						 (lwl #b100010 :ls-type)
-						 (lwr #b100110 :ls-type)
-						 (lwu #b100111 :ls-type)
-						 (sb  #b101000 :ls-type)
-						 (sd  #b111111 :ls-type)
-						 (sdl #b101100 :ls-type)
-						 (sdr #b101101 :ls-type)
-						 (sh  #b101001 :ls-type)
-						 (sw  #b101011 :ls-type)
-						 (swl #b101010 :ls-type)
-						 (swr #b101110 :ls-type)
-						 (sq  #b011111 :ls-type)
-
-						 ;; special 0
-
-						 (add   #b100000 :s0-type)
-						 (addu  #b100001 :s0-type)
-						 (and   #b100100 :s0-type)
-						 (dadd  #b101100 :s0-type)
-						 (daddu #b101101 :s0-type)
-						 (dsllv #b010100 :s0-type)
-						 (dsrav #b010111 :s0-type)
-						 (dsrlv #b010110 :s0-type)
-						 (dsub  #b101110 :s0-type)
-						 (dsubu #b101111 :s0-type)
-						 (movn  #b001011 :s0-type)
-						 (movz  #b001010 :s0-type)
-						 (nor   #b100111 :s0-type)
-						 (or    #b100101 :s0-type)
-						 (sllv  #b000100 :s0-type)
-						 (slt   #b101010 :s0-type)
-						 (sltu  #b101011 :s0-type)
-						 (srav  #b000111 :s0-type)
-						 (srlv  #b000110 :s0-type)
-						 (sub   #b100010 :s0-type)
-						 (subu  #b100011 :s0-type)
-						 (xor   #b100110 :s0-type)
-
-						 ;; special 1
-						
-						 (dsll   #b111000 :s1-type)
-						 (dsll32 #b111100 :s1-type)
-						 (dsra   #b111011 :s1-type)
-						 (dsra32 #b111111 :s1-type)
-						 (drsl   #b111010 :s1-type)
-						 (drsl32 #b111110 :s1-type)
-						 (sll    #b000000 :s1-type)
-						 (sra    #b000011 :s1-type)
-						 (srl    #b000010 :s1-type)
-
-						 ;; branch
-
-						 (beq  #b000100 :b0-type)
-						 (beql #b000100 :b0-type)
-						 (bne  #b000101 :b0-type)
-						 (bnel #b010101 :b0-type)
-						 (bgez    #b00001 :b1-type)
-						 (bgezal  #b10001 :b1-type)
-						 (bgezall #b10011 :b1-type)
-						 (bgezl   #b00011 :b1-type)
-						 (bltz    #b00000 :b1-type)
-						 (bltzal  #b10000 :b1-type)
-						 (bltzall #b10010 :b1-type)
-						 (bltzl	  #b00010 :b1-type)
-						 (bgtz  #b000111 :b2-type)
-						 (bgtzl #b010111 :b2-type)
-						 (blez  #b000110 :b2-type)
-						 (blezl #b010110 :b2-type)
-
-						 ;; jumps
-
-						 (j #b00010 :j0-type)
-						 (jal #b00011 :j0-type)
-						 (jalr #b001001 :j1-type)
-						 (jr #b001000 :j2-type)
-
-						 ;; move hi/lo registers
-
-						 (mfhi #b010000 :mfhl-type)
-						 (mflo #b010010 :mfhl-type)
-						 (mthi #b010000 :mthl-type)
-						 (mtlo #b010010 :mthl-type)
-
-						 ;; multiply / divide
-
-						 (mult  #b011000 :md-type)
-						 (multu #b011001 :md-type)
-						 (div  #b011010 :md-type)
-						 (divu #b011011 :md-type)
-
-						 ;; sync
-
-						 (sync   #b001111 :sync-type)
-						 (sync.l #b001111 :sync-type)
-						 (sync.p #b101111 :sync-type)
+				   '(
 
 						 ;; trap
 
