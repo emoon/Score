@@ -32,6 +32,7 @@
 		(loop for i from 0 to 31 collecting (setf (gethash (intern (format nil "R~d" i)) hash) i)) hash))
 
 (defparameter *ee-registers* (make-ee-registers-hash)) 
+; (defparameter *fpu-registers* (make-ee-registers-hash "FP")) 
 
 (defun print-hash-entry (key value)
     (format t "The value associated with the key ~S is ~S~%" key value))
@@ -45,7 +46,7 @@
 
 ; info about how to encode the function
 
-(defstruct encoding inst spec rd rs rt imm func)
+(defstruct encoding inst (spec 0) rd rs rt imm (fixed 0) func)
 
 ;; binds and valdiats rt and rs
 
@@ -87,18 +88,19 @@
 		(write-value stream (logior (ash instruction (encoding-inst enc)) 
 																(ash rs (encoding-rs enc))
 																(ash rt (encoding-rt enc))
-																(ash (nth 3 arguments) (encoding-imm enc))) 4)))
+																(ash (logand (nth 3 arguments) #xffff) (encoding-imm enc))) 4)))
 
 ;;; instruction type 1
 ;;; 
 ;;; <operand> <register>, <register>, <register> 
 ;;;
 
-(defun inst-type1 (stream instruction special-value arguments enc) 
+(defun inst-type1 (stream instruction arguments enc) 
 	(when (not (equal (length arguments) 4))
 		(error (format nil "Expected 4 arguments si-type <operand> rd, rs, rt, was given ~{~a~^, ~}" arguments)))
-	(multiple-value-bind (rd rt rs) (validate-rd-rt-rs arguments)
-		(write-value stream (logior (ash special-value (encoding-spec enc)) 
+	(multiple-value-bind (rd rs rt) (validate-rd-rt-rs arguments)
+		(write-value stream (logior (ash (encoding-spec enc) 26) 
+																(ash (encoding-fixed enc) 0)
 																(ash rs (encoding-rs enc))
 																(ash rt (encoding-rt enc))
 																(ash rd (encoding-rd enc))
@@ -112,7 +114,7 @@
 (defun inst-type2 (stream instruction arguments enc)
 	(when (not (equal (length arguments) 3))
 		(error (format nil "Expected 3 arguments si-type <operand> rt, rs/base, <immediate> was given ~{~a~^, ~}" arguments)))
-	(let (rs (gethash (first arguments) *ee-registers*))
+	(let ((rs (gethash (first arguments) *ee-registers*)))
 		(when (not rs)
 			(error (format nil "Invalid register name for rt ~s" (first arguments))))
 		(when (not (numberp (nth 2 arguments)))
@@ -155,7 +157,7 @@
 (defun inst-type5 (stream instruction arguments enc)
 	(when (not (equal (length arguments) 2))
 		(error (format nil "Expected 2 arguments si-type <operand> rt, rs/base, <immediate> was given ~{~a~^, ~}" arguments)))
-	(let (rt (gethash (first arguments) *ee-registers*))
+	(let ((rt (gethash (first arguments) *ee-registers*)))
 		(when (not rt)
 			(error (format nil "Invalid register name for rt ~s" (first arguments))))
 		(write-value stream (logior (ash instruction (encoding-inst enc)) 
@@ -168,7 +170,7 @@
 (defun inst-type6 (stream instruction arguments enc)
 	(when (not (equal (length arguments) 1))
 		(error (format nil "Expected 1 arguments si-type <operand> rt, rs/base, <immediate> was given ~{~a~^, ~}" arguments)))
-		(write-value stream ((ash instruction (encoding-inst enc))) 4))
+	(write-value stream (ash instruction (encoding-inst enc)) 4))
 
 ;;; List over all ee - instructions
 
@@ -184,42 +186,38 @@
 			(error (format nil "Invalid instruction name ~{~a~^, ~}" instruction)))
 		(funcall (encoding-func (second instruction-info)) stream (first instruction-info) instruction (second instruction-info))))
 
+
+(defun test-write-instructions (instructions)
+	(with-open-file (stream "c:/temp/out.bin" 
+													 :direction :output 
+													 :if-exists :overwrite
+													 :element-type '(unsigned-byte 8))
+		(loop for i in instructions do
+			(encode-ee-instruction stream i))))
+
 (defparameter *mips-instructions* (make-hash-table :test #'eq))
 
 ;;
-;; Type 0 instructions 
-;; <operand> <register>, <register>, <immediate>
+;; Registers all instructions 
 ;;
 
 (make-ee-instructions (make-encoding :inst 26 :rs 21 :rt 16 :imm 0 :func #'inst-type0)
 											'((addi #b001000) (addiu #b001001) (andi #b001100) (daddi #b011000) (daddiu #b011001)
 											  (lui  #b001111) (ori   #b001101) (slti #b001010) (sltiu #b001011) (xori   #b001110)
-
-												;; load and store instructions
- 												
 												(lb  #b100000) (lbu #b100100) (ld  #b110111) (ldl #b011010) (ldr #b011011)
 												(lwl #b100010) (lh  #b100000) (lhu #b100001) (lw  #b100011) (lq  #b011110)
 												(lwl #b100010) (lwr #b100110) (lwu #b100111)
 												(sb  #b101000) (sd  #b111111) (sdl #b101100) (sdr #b101101) (sh  #b101001)
 												(sw  #b101011) (swl #b101010) (swr #b101110) (sq  #b011111)
-
-												;; some branches
-												
 											  (beq  #b000100) (beql #b000100) (bne  #b000101) (bnel #b010101)))
 
-;;
-;; Type 0 instructions (shift) (encoding actually uses rd, rt but we use rt, rs as as it looks the same at callsite
-;;
-
-(make-ee-instructions (make-encoding :spec 0 :inst 0 :rs 16 :rt 11 :imm 5 :func #'inst-type1)
+(make-ee-instructions (make-encoding :spec 0 :inst 0 :rs 16 :rt 11 :imm 5 :func #'inst-type0)
 											'((dsll   #b111000) (dsll32 #b111100) (dsra   #b111011) 
 												(dsra32 #b111111) (drsl   #b111010) (drsl32 #b111110)
 										    (sll    #b000000) (sra    #b000011) (srl    #b000010)))
 
-;;
-;; Type 1 instructions 
-;;; <operand> <register>, <register>, <register> 
-;;
+(make-ee-instructions (make-encoding :inst 0 :spec 0 :rs 16 :rt 11 :imm 6 :func #'inst-type0)
+											'((teq #b110100) (tge #b110000) (tlt #b110010) (tne #b110110)))
 
 (make-ee-instructions (make-encoding :spec 0 :inst 0 :rs 21 :rt 16 :rd 11 :func #'inst-type1)
 											'((add   #b100000) (addu  #b100001) (and   #b100100) (dadd  #b101100) (daddu #b101101) 
@@ -228,10 +226,31 @@
 												(sllv  #b000100) (slt   #b101010) (sltu  #b101011) (srav  #b000111) (srlv  #b000110)
 												(sub   #b100010) (subu  #b100011) (xor   #b100110)))
 
-;;
-;; Type 2 instructions 
-;; <operand> <register>, <immediate> 
-;;
+(make-ee-instructions (make-encoding :spec #b011100 :fixed #b001000 :inst 0 :rs 21 :rt 16 :rd 11 :func #'inst-type1)
+											'((paddb  #b01000) (paddh  #b00100) (paddsb #b11000) (paddsh #b10100) (paddsw #b11000)
+												(paddw  #b00100) (pcgtb  #b01010) (pcgth  #b00110) (pcgtw  #b00100) (pext5  #b11110)
+												(pextlb #b11010) (pextlh #b10110) (pextlw #b10010) (pmaxh  #b00111) (pmaxw  #b00011)
+												(ppac5  #b11111) (ppacb  #b11011) (ppach  #b10111) (ppacw  #b10011) (psubb  #b01001)
+												(psubh  #b00101) (psubsb #b11001) (psubsh #b10101) (psubsw #b10001) (psubw  #b00001)))
+
+(make-ee-instructions (make-encoding :spec #b011100 :fixed #b101000 :inst 0 :rs 21 :rt 16 :rd 11 :func #'inst-type1)
+											'((pabsh  #b00101) (pabsw  #b00001) (paddub #b11000) (padduh #b10100) (padduw #b10000)
+												(padsbh #b00100) (pceqb  #b01010) (pceqh  #b00110) (pceqw  #b00010) (pextub #b11010)
+												(pextuh #b10110) (pextuw #b10010) (pminh  #b00111) (pminw  #b00011) (psubub #b11001)
+												(psubuh #b10101) (psubuw #b10001) (qfsrv  #b11011)))
+
+(make-ee-instructions (make-encoding :spec #b011100 :fixed #b001001 :inst 0 :rs 21 :rt 16 :rd 11 :func #'inst-type1)
+											'((pand   #b10010) (pcpyld #b01110) (pdivbw #b11101) (pexeh  #b11010) (pexew  #b11110)
+												(phmadh #b10001) (phmsbh #b10101) (pinth  #b01010) (pmaddh #b10000) (pmaddw #b00000)
+												(pmfhi  #b01000) (pmflo  #b01001) (pmsubh #b10100) (pmsubw #b00100) (pmulth #b11100)
+												(pmultw #b01100) (prevh  #b11011) (prot3w #b11111) (psllvw #b00010) (psrlvw #b00011)
+												(pxor   #b01001)))
+
+(make-ee-instructions (make-encoding :spec #b011100 :fixed #b101001 :inst 0 :rs 21 :rt 16 :rd 11 :func #'inst-type1)
+											'((pcpyh  #b11001) (pcpyud #b01110) (pdivw  #b01101) (pdivuw #b01001) (pexch  #b11010)
+												(pexcw  #b11110) (pinteh #b01010) (pmadduw #b00000) 
+												(psllh #b111100) (psllw #b111101) (psravw #b111101) (psrlh #b111101) (psrlvw #b111101)
+												(psrlw #b111101)))
 
 (make-ee-instructions (make-encoding :spec 1 :inst 16 :rs 21 :imm 0 :func #'inst-type2)
 											'((bgez #b00001) (bgezal #b10001) (bgezall #b10011) (bgezl #b00011)
@@ -240,164 +259,50 @@
 (make-ee-instructions (make-encoding :spec 1 :inst 16 :rs 21 :imm 0 :func #'inst-type2)
 											'((bgtz #b000111) (bgtzl #b010111) (blez #b000110) (blezl #b010110)))
 
-(make-ee-instructions (make-encoding :spec 0 :inst 0 :rs 21 :func #'inst-type2)
+(make-ee-instructions (make-encoding :spec 0 :inst 0 :rs 21 :imm 0 :func #'inst-type2)
 											'((jr #b001000))) 
 
-;;
-;; Type 3 instructions 
-;;; <operand> <immediate> 
-;;
+(make-ee-instructions (make-encoding :spec 0 :inst 16 :rs 21 :imm 0 :func #'inst-type2)
+											'((teqi  #b010000 :ti-type) (tgei  #b110001 :ti-type) (tgeiu #b110000 :ti-type)
+						 						(tlti  #b111010 :ti-type) (tltiu #b111010 :ti-type) (tnei  #b110010 :ti-type)))
+
+(make-ee-instructions (make-encoding :spec 0 :inst 26 :rs 21 :imm 0 :func #'inst-type2)
+											'((pref #b110011)))
 
 (make-ee-instructions (make-encoding :inst 26 :imm 0 :func #'inst-type3)
 											'((j #b00010) (jal #b00011)))
 
-;;
-;; Type 4 instructions 
-;; <operand> <register>, <register>
-;;
+(make-ee-instructions (make-encoding :inst 6 :imm 6 :func #'inst-type3)
+											'((syscall #b001100))) 
 
-(make-ee-instructions (make-encoding :rs 21 :rt 11 :func #'inst-type4) 
+(make-ee-instructions (make-encoding :inst 0 :rs 21 :rt 11 :func #'inst-type4) 
 											'((jalr #b001001)))
 
-(make-ee-instructions (make-encoding :rs 21 :rt 16 :func #'inst-type4) 
+(make-ee-instructions (make-encoding :inst 0 :rs 21 :rt 16 :func #'inst-type4) 
 						 				  '((mult #b011000) (multu #b011001) 
 												(div  #b011010) (divu #b011011)))
-
-;;
-;; Type 5 instructions 
-;;; <operand> <register>
-;;
 
 (make-ee-instructions (make-encoding :rt 11 :func #'inst-type5) 
 											 '((mfhi #b010000) (mflo #b010010)))
 
 (make-ee-instructions (make-encoding :rt 21 :func #'inst-type5) 
-											 '((mthi #b010000) (mtlo #b010010)))
+										   '((pmfhl.lh  #b110011) (pmfhl.lw #b110000) (pmfhl.sh #b110100)
+												 (pmfhl.slw #b110010) (pmfhi.uw #b110001) (pmthi		#b10000)
+												 (pmthi.lw	#b100000) (pmtlo		#b10001)))
 
-;;
-;; Type 6 instructions 
-;;; <operand> 
-;;
 
 (make-ee-instructions (make-encoding :inst 0 :func #'inst-type6) 
-											 '((sync #b001111) (sync.l #b001111) (sync.p #b101111)
+											 '((sync #b001111) (sync.l #b001111) (sync.p #b101111)))
 
 (defparameter *mips-instructions-temp* 
 				   '(
 
 						 ;; trap
 
-						 (teq #b110100 :t-type)
-						 (tge #b110000 :t-type)
-						 (tlt #b110010 :t-type)
-						 (tne #b110110 :t-type)
-						 (teqi  #b010000 :ti-type)
-						 (tgei  #b110001 :ti-type)
-						 (tgeiu #b110000 :ti-type)
-						 (tlti  #b111010 :ti-type)
-						 (tltiu #b111010 :ti-type)
-						 (tnei  #b110010 :ti-type)
-
 						 ;; misc
-
-						 (pref #b110011 :pref-type)
-						 (syscall #b001100 :syscall-type)
 
 						 ;; MMI instructions
 
-						 (paddb  #b01000 :mmi0-type)
-						 (paddh  #b00100 :mmi0-type)
-						 (paddsb #b11000 :mmi0-type)
-						 (paddsh #b10100 :mmi0-type)
-						 (paddsw #b11000 :mmi0-type)
-						 (paddw  #b00100 :mmi0-type)
-						 (pcgtb  #b01010 :mmi0-type)
-						 (pcgth  #b00110 :mmi0-type)
-						 (pcgtw  #b00100 :mmi0-type)
-						 (pext5  #b11110 :mmi0-type)
-						 (pextlb #b11010 :mmi0-type)
-						 (pextlh #b10110 :mmi0-type)
-						 (pextlw #b10010 :mmi0-type)
-						 (pmaxh  #b00111 :mmi0-type)
-						 (pmaxw  #b00011 :mmi0-type)
-						 (ppac5  #b11111 :mmi0-type)
-						 (ppacb  #b11011 :mmi0-type)
-						 (ppach  #b10111 :mmi0-type)
-						 (ppacw  #b10011 :mmi0-type)
-						 (psubb  #b01001 :mmi0-type)
-						 (psubh  #b00101 :mmi0-type)
-						 (psubsb #b11001 :mmi0-type)
-						 (psubsh #b10101 :mmi0-type)
-						 (psubsw #b10001 :mmi0-type)
-						 (psubw  #b00001 :mmi0-type)
-
-						 (pabsh  #b00101 :mmi1-type)
-						 (pabsw  #b00001 :mmi1-type)
-						 (paddub #b11000 :mmi1-type)
-						 (padduh #b10100 :mmi1-type)
-						 (padduw #b10000 :mmi1-type)
-						 (padsbh #b00100 :mmi1-type)
-						 (pceqb  #b01010 :mmi1-type)
-						 (pceqh  #b00110 :mmi1-type)
-						 (pceqw  #b00010 :mmi1-type)
-						 (pextub #b11010 :mmi1-type)
-						 (pextuh #b10110 :mmi1-type)
-						 (pextuw #b10010 :mmi1-type)
-						 (pminh  #b00111 :mmi1-type)
-						 (pminw  #b00011 :mmi1-type)
-						 (psubub #b11001 :mmi1-type)
-						 (psubuh #b10101 :mmi1-type)
-						 (psubuw #b10001 :mmi1-type)
-						 (qfsrv  #b11011 :mmi1-type)
-
-						 (pand   #b10010 :mmi2-type)
-						 (pcpyld #b01110 :mmi2-type)
-						 (pdivbw #b11101 :mmi2-type)
-						 (pexeh  #b11010 :mmi2-type)
-						 (pexew  #b11110 :mmi2-type)
-						 (phmadh #b10001 :mmi2-type)
-						 (phmsbh #b10101 :mmi2-type)
-						 (pinth  #b01010 :mmi2-type)
-						 (pmaddh #b10000 :mmi2-type)
-						 (pmaddw #b00000 :mmi2-type)
-						 (pmfhi  #b01000 :mmi2mh-type)
-						 (pmflo  #b01001 :mmi2mh-type)
-						 (pmsubh #b10100 :mmi2-type)
-						 (pmsubw #b00100 :mmi2-type)
-						 (pmulth #b11100 :mmi2-type)
-						 (pmultw #b01100 :mmi2-type)
-						 (prevh  #b11011 :mmi2n-type)
-						 (prot3w #b11111 :mmi2n-type)
-						 (psllvw #b00010 :mmi2-type)
-						 (psrlvw #b00011 :mmi2-type)
-						 (pxor   #b01001 :mmi2-type)
-
-						 (pmfhl.lh  #b110011 :pmfhl-type)
-						 (pmfhl.lw  #b110000 :pmfhl-type)
-						 (pmfhl.sh  #b110100 :pmfhl-type)
-						 (pmfhl.slw #b110010 :pmfhl-type)
-						 (pmfhi.uw  #b110001 :pmfhl-type)
-
-						 (pmthi		#b10000 :pmthi-type)
-						 (pmthi.lw	#b10000 :pmthi.lw-type)
-						 (pmtlo		#b10001 :pmtlo-type)
-
-						 (pcpyh  #b11001 :mmi3-type)
-						 (pcpyud #b01110 :mmi3-type)
-						 (pdivw  #b01101 :pdiv-type)
-						 (pdivuw #b01001 :pdiv-type)
-						 (pexch  #b11010 :mmi3n-type)
-						 (pexcw  #b11110 :mmi3n-type)
-						 (pinteh #b01010 :mmi3-type)
-						 (pmadduw #b00000 :mmi3-type)
-
-						 (psllh #b111100 :psll-type)
-						 (psllw #b111101 :psll-type)
-						 (psravw #b111101 :psll-type)
-						 (psrlh #b111101 :psll-type)
-						 (psrlvw #b111101 :psll-type)
-						 (psrlw #b111101 :psll-type)
-					
 						 ;; Float ops
 
 						 (abs.s   #b000101 :f0-type)
