@@ -21,6 +21,18 @@
 						; here we can start pushing out the instructions but just printing now
 						(print i)))))))
 
+;;;
+;;; Test code
+;;;
+
+(defun test-write-instructions (instructions)
+	(with-open-file (stream "c:/temp/out.bin" 
+													 :direction :output 
+													 :if-exists :overwrite
+													 :element-type '(unsigned-byte 8))
+		(loop for i in instructions do
+			(encode-ee-instruction stream i))))
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Implementing the mips (r5900 assembler here)
 ;;;
@@ -32,7 +44,9 @@
 		(loop for i from 0 to 31 collecting (setf (gethash (intern (format nil "R~d" i)) hash) i)) hash))
 
 (defparameter *ee-registers* (make-ee-registers-hash)) 
-; (defparameter *fpu-registers* (make-ee-registers-hash "FP")) 
+(defparameter *fpu-registers* nil) 
+(defparameter *register-type-lut* '(rs *ee-registers* rt *ee-registers* rd *ee-registers*
+																		fs *fpu-registers* ft *fpu-registers* fd *fpu-registers*))
 
 (defun print-hash-entry (key value)
     (format t "The value associated with the key ~S is ~S~%" key value))
@@ -46,7 +60,17 @@
 
 ; info about how to encode the function
 
-(defstruct encoding inst (spec 0) rd rs rt imm (fixed 0) func)
+(defstruct encoding inst (spec 0) rd rs rt imm (fixed 0) fs ft fd func)
+
+;;
+;; encode instruction
+;;
+
+(defun encode-ee-instruction (stream instruction)
+	(let ((instruction-info (gethash (first instruction) *mips-instructions*)))
+		(when (not instruction-info)
+			(error (format nil "Invalid instruction name ~{~a~^, ~}" instruction)))
+		(funcall (encoding-func (second instruction-info)) stream (first instruction-info) instruction (second instruction-info))))
 
 ;;
 ;; builds the diffrent instruction types based on the inst-layout data
@@ -59,7 +83,7 @@
 				,(when (first inst-layout)
 					;; Generate the let for all the registers
 					`(let ,(loop for i in (first inst-layout) for c from 1 collecting 
-						`(,i (gethash (nth ,c arguments) *ee-registers*)))
+						`(,i (gethash (nth ,c arguments) ,(getf *register-type-lut* i))))
 						;; error checking for all the registers
 					,@(loop for i in (first inst-layout) for c from 1 collect
 						`(when (not ,i) 
@@ -79,9 +103,7 @@
 																	(ash (encoding-spec enc) 26) 
 																	(ash (encoding-fixed enc) 0)) 4)))))
 
-;;
 ;; diffrent type of ee instructions
-;;
 
 (def-inst-type inst-type0 ((rd rt) #x0000ffff)) 
 (def-inst-type inst-type1 ((rd rt rs))) 
@@ -91,6 +113,14 @@
 (def-inst-type inst-type5 ((rt))) 
 (def-inst-type inst-type6 (())) 
 
+;; fpu instructions
+
+(def-inst-type fpu-inst0 ((ft fs))) 
+(def-inst-type fpu-inst1 ((ft fs fd))) 
+(def-inst-type fpu-inst2 ((rt rs))) 
+
+; (def-inst-type inst-type0 *fpu-registers* ((rd rt) #x0000ffff)) 
+
 ;;; List over all ee - instructions
 
 (defun make-ee-instructions (enc opcode-list) 
@@ -98,21 +128,6 @@
 		(setf (gethash (first i) *mips-instructions*) (list (second i) enc))))
 
 ;;; instruction encoding
-
-(defun encode-ee-instruction (stream instruction)
-	(let ((instruction-info (gethash (first instruction) *mips-instructions*)))
-		(when (not instruction-info)
-			(error (format nil "Invalid instruction name ~{~a~^, ~}" instruction)))
-		(funcall (encoding-func (second instruction-info)) stream (first instruction-info) instruction (second instruction-info))))
-
-
-(defun test-write-instructions (instructions)
-	(with-open-file (stream "c:/temp/out.bin" 
-													 :direction :output 
-													 :if-exists :overwrite
-													 :element-type '(unsigned-byte 8))
-		(loop for i in instructions do
-			(encode-ee-instruction stream i))))
 
 (defparameter *mips-instructions* (make-hash-table :test #'eq))
 
@@ -209,6 +224,12 @@
 												 (pmfhl.slw #b110010) (pmfhi.uw #b110001) (pmthi		#b10000)
 												 (pmthi.lw	#b100000) (pmtlo		#b10001)))
 
+(make-ee-instructions (make-encoding :inst 0 :func #'inst-type6) 
+											 '((sync #b001111) (sync.l #b001111) (sync.p #b101111)))
+
+;;
+;; fpu instructions
+;;
 
 (make-ee-instructions (make-encoding :inst 0 :func #'inst-type6) 
 											 '((sync #b001111) (sync.l #b001111) (sync.p #b101111)))
