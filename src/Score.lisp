@@ -48,129 +48,48 @@
 
 (defstruct encoding inst (spec 0) rd rs rt imm (fixed 0) func)
 
-;; binds and valdiats rt and rs
+;;
+;; builds the diffrent instruction types based on the inst-layout data
+;;
 
-(defun validate-rt-rs (arguments)
-	(let ((rt (gethash (nth 1 arguments) *ee-registers*)) 
-			  (rs (gethash (nth 2 arguments) *ee-registers*)))
-		(when (not rt)
-			(error (format nil "Invalid register name for rt ~s" (nth 1 arguments))))
-		(when (not rs)
-			(error (format nil "Invalid register name for rs ~s" (nth 2 arguments))))
-		(values rt rs)))
+(defmacro def-inst-type (name inst-layout)
+ `(progn
+		(defun ,name (stream instruction arguments enc)
+			(let ((code 0))
+				,(when (first inst-layout)
+					;; Generate the let for all the registers
+					`(let ,(loop for i in (first inst-layout) for c from 1 collecting 
+						`(,i (gethash (nth ,c arguments) *ee-registers*)))
+						;; error checking for all the registers
+					,@(loop for i in (first inst-layout) for c from 1 collect
+						`(when (not ,i) 
+							(error (format nil "Invalid register name ~s" (nth ,c arguments)))))
+				;; encode the registers
+				(setf code (logior ,@(loop for i in (first inst-layout) collecting 
+					`(ash ,i ,(read-from-string (format nil "(ENCODING-~A ENC)" i))))))))
+			;; if we have a length of 2 in the list then we have imm value also and it needs to be a number 
+			,(when (eql (length inst-layout) 2)
+				(let ((imm-arg (+ (length (first inst-layout)) 1)))
+					;`(when (not (numberp (nth ,imm-arg arguments)))
+					;	(error (format nil "Invalid immediate ~s" (nth ,imm-arg arguments))))
+						;; encode the immediate value
+					`(setf code (logior code (ash (logand (nth ,imm-arg arguments) ,(second inst-layout))  (encoding-imm enc))))))
+			(write-value stream (logior code 
+																	(ash instruction (encoding-inst enc)) 
+																	(ash (encoding-spec enc) 26) 
+																	(ash (encoding-fixed enc) 0)) 4)))))
 
-;; binds and valdiats rd, rs and rt 
+;;
+;; diffrent type of ee instructions
+;;
 
-(defun validate-rd-rt-rs (arguments)
-	(let ((rd (gethash (nth 1 arguments) *ee-registers*)) 
-			  (rs (gethash (nth 2 arguments) *ee-registers*))
-			  (rt (gethash (nth 3 arguments) *ee-registers*)))
-		(when (not rd)
-			(error (format nil "Invalid register name for rd ~s" (nth 1 arguments))))
-		(when (not rs)
-			(error (format nil "Invalid register name for rs ~s" (nth 2 arguments))))
-		(when (not rt)
-			(error (format nil "Invalid register name for rt ~s" (nth 3 arguments))))
-		(values rd rs rt)))
-
-
-;;; instruction type 0
-;;;
-;;; <operand> <register>, <register>, <immediate>
-;;;
-
-(defun inst-type0 (stream instruction arguments enc)
-	(when (not (equal (length arguments) 4))
-		(error (format nil "Expected 4 arguments si-type <operand> rt, rs/base, <immediate> was given ~{~a~^, ~}" arguments)))
-	(multiple-value-bind (rt rs) (validate-rt-rs arguments)
-		(when (not (numberp (nth 3 arguments)))
-			(error (format nil "Invalid immediate ~s" (nth 3 arguments))))
-		(write-value stream (logior (ash instruction (encoding-inst enc)) 
-																(ash rs (encoding-rs enc))
-																(ash rt (encoding-rt enc))
-																(ash (logand (nth 3 arguments) #xffff) (encoding-imm enc))) 4)))
-
-;;; instruction type 1
-;;; 
-;;; <operand> <register>, <register>, <register> 
-;;;
-
-(defun inst-type1 (stream instruction arguments enc) 
-	(when (not (equal (length arguments) 4))
-		(error (format nil "Expected 4 arguments si-type <operand> rd, rs, rt, was given ~{~a~^, ~}" arguments)))
-	(multiple-value-bind (rd rs rt) (validate-rd-rt-rs arguments)
-		(write-value stream (logior (ash (encoding-spec enc) 26) 
-																(ash (encoding-fixed enc) 0)
-																(ash rs (encoding-rs enc))
-																(ash rt (encoding-rt enc))
-																(ash rd (encoding-rd enc))
-																(ash instruction (encoding-inst enc))) 4)))
-
-;;; instruction type 2
-;;; 
-;;; <operand> <register>, <immediate> 
-;;;
-
-(defun inst-type2 (stream instruction arguments enc)
-	(when (not (equal (length arguments) 3))
-		(error (format nil "Expected 3 arguments si-type <operand> rt, rs/base, <immediate> was given ~{~a~^, ~}" arguments)))
-	(let ((rs (gethash (first arguments) *ee-registers*)))
-		(when (not rs)
-			(error (format nil "Invalid register name for rt ~s" (first arguments))))
-		(when (not (numberp (nth 2 arguments)))
-			(error (format nil "Invalid immediate ~s" (nth 2 arguments))))
-		(write-value stream (logior (ash instruction (encoding-inst enc)) 
-																(ash rs (encoding-rs enc))
-																(ash (nth 2 arguments) (encoding-imm enc))) 4)))
-
-;;; instruction type 3
-;;; 
-;;; <operand> <immediate> 
-;;;
-
-(defun inst-type3 (stream instruction arguments enc)
-	(when (not (equal (length arguments) 2))
-		(error (format nil "Expected 2 arguments <operand> <immediate> was given ~{~a~^, ~}" arguments)))
-	(when (not (numberp (nth 1 arguments)))
-		(error (format nil "Invalid immediate ~s" (nth 1 arguments))))
-	(write-value stream (logior (ash instruction (encoding-inst enc)) 
-															(ash (nth 1 arguments) (encoding-imm enc))) 4))
-
-;;; instruction type 4
-;;;
-;;; <operand> <register>, <register>
-;;;
-
-(defun inst-type4 (stream instruction arguments enc)
-	(when (not (equal (length arguments) 3))
-		(error (format nil "Expected 3 arguments si-type <operand> rt, rs/base, <immediate> was given ~{~a~^, ~}" arguments)))
-	(multiple-value-bind (rt rs) (validate-rt-rs arguments)
-		(write-value stream (logior (ash instruction (encoding-inst enc)) 
-																(ash rs (encoding-rs enc))
-																(ash rt (encoding-rt enc))) 4)))
-
-;;; instruction type 5
-;;; 
-;;; <operand> <register>
-;;;
-
-(defun inst-type5 (stream instruction arguments enc)
-	(when (not (equal (length arguments) 2))
-		(error (format nil "Expected 2 arguments si-type <operand> rt, rs/base, <immediate> was given ~{~a~^, ~}" arguments)))
-	(let ((rt (gethash (first arguments) *ee-registers*)))
-		(when (not rt)
-			(error (format nil "Invalid register name for rt ~s" (first arguments))))
-		(write-value stream (logior (ash instruction (encoding-inst enc)) 
-																(ash rt (encoding-rt enc))) 4)))
-;;; instruction type 6
-;;; 
-;;; <operand> 
-;;;
-
-(defun inst-type6 (stream instruction arguments enc)
-	(when (not (equal (length arguments) 1))
-		(error (format nil "Expected 1 arguments si-type <operand> rt, rs/base, <immediate> was given ~{~a~^, ~}" arguments)))
-	(write-value stream (ash instruction (encoding-inst enc)) 4))
+(def-inst-type inst-type0 ((rd rt) #x0000ffff)) 
+(def-inst-type inst-type1 ((rd rt rs))) 
+(def-inst-type inst-type2 ((rs) #x0000ffff)) 
+(def-inst-type inst-type3 (() #x0000ffff)) 
+(def-inst-type inst-type4 ((rt rs))) 
+(def-inst-type inst-type5 ((rt))) 
+(def-inst-type inst-type6 (())) 
 
 ;;; List over all ee - instructions
 
