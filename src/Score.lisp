@@ -38,18 +38,18 @@
 
 (defun gen-rand-inst () 
 	 (with-open-file (stream "c:/temp/code.txt" :direction :output :if-exists :overwrite)
-		 (loop for i from 0 to 100 do
-		 		(let* ((randnum (random 180))
-		 				   (instruction (aref *instruction-vector* randnum))
-							 (instruction-info (gethash instruction *mips-instructions*)))
-					(case (encoding-type instruction-info) 
-						(0 (format t "( ~S~% r2 r3 12 )" instruction))   
-						(1 (format t "( ~S~% r2 r3 r4 )" instruction))   
-						(2 (format t "( ~S~% r2 12 )" instruction))   
-						(3 (format t "( ~S~% 12 )" instruction))   
-						(4 (format t "( ~S~% r2 r3 )" instruction))
-						(5 (format t "( ~S~% r2 )" instruction))   
-						(6 (format t "( ~S~% )" instruction)))))))
+		 (loop for i from 0 to 180 do
+		 		(let* ((instruction (aref *instruction-vector* i))
+							 (instruction-info (gethash instruction *mips-instructions*))
+							 (type (encoding-type (second instruction-info))))
+					(case type 
+						(0 (format stream "(~(~s~) r2 r3 12)~%" instruction))   
+						(1 (format stream "(~(~s~) r2 r3 r4)~%" instruction))   
+						(2 (format stream "(~(~s~) r2 12)~%" instruction))   
+						(3 (format stream "(~(~s~) 12)~%" instruction))   
+						(4 (format stream "(~(~s~) r2 r3)~%" instruction))
+						(5 (format stream "(~(~s~) r2)~%" instruction))   
+						(6 (format stream "(~(~s)~)~%" instruction)))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Implementing the mips (r5900 assembler here)
@@ -98,7 +98,6 @@
  `(progn
 		(defun ,name (stream instruction arguments enc)
 			(let ((code 0))
-				(pprint enc)
 				,(when (first inst-layout)
 					;; Generate the let for all the registers
 					`(let ,(loop for i in (first inst-layout) for c from 1 collecting 
@@ -130,7 +129,7 @@
 (def-inst-type inst-type3 (() #x0000ffff)) 
 (def-inst-type inst-type4 ((rt rs))) 
 (def-inst-type inst-type5 ((rt))) 
-(def-inst-type inst-type6 (())) 
+; (def-inst-type inst-type6 (())) 
 
 ;; fpu instructions
 
@@ -240,16 +239,16 @@
 						 				  '((mult #b011000) (multu #b011001) 
 												(div  #b011010) (divu #b011011)))
 
-(make-ee-instructions (make-encoding :rt 11 :type 5 :func #'inst-type5) 
+(make-ee-instructions (make-encoding :inst 0 :rt 11 :type 5 :func #'inst-type5) 
 											 '((mfhi #b010000) (mflo #b010010)))
 
-(make-ee-instructions (make-encoding :rt 21 :type 5 :func #'inst-type5) 
+(make-ee-instructions (make-encoding :inst 0 :rt 21 :type 5 :func #'inst-type5) 
 										   '((pmfhl.lh  #b110011) (pmfhl.lw #b110000) (pmfhl.sh #b110100)
 												 (pmfhl.slw #b110010) (pmfhi.uw #b110001) (pmthi		#b10000)
 												 (pmthi.lw	#b100000) (pmtlo		#b10001)))
 
-(make-ee-instructions (make-encoding :inst 0 :type 6 :func #'inst-type6) 
-											 '((sync #b001111) (sync.l #b001111) (sync.p #b101111)))
+; (make-ee-instructions (make-encoding :inst 0 :type 6 :func #'inst-type6) 
+;											 '((sync #b001111) (sync.l #b001111) (sync.p #b101111)))
 
 ;;
 ;; fpu instructions
