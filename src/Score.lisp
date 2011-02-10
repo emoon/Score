@@ -97,6 +97,8 @@
 (defmacro def-inst-type (name inst-layout)
  `(progn
 		(defun ,name (stream instruction arguments enc)
+			(pprint enc)
+			(pprint instruction)
 			(let ((code 0))
 				,(when (first inst-layout)
 					;; Generate the let for all the registers
@@ -119,7 +121,7 @@
 			(write-value stream (logior code 
 																	(ash instruction (encoding-inst enc)) 
 																	(ash (encoding-spec enc) 26) 
-																	(ash (encoding-fixed enc) 0)) 4)))))
+																	(encoding-fixed enc)) 4)))))
 
 ;; diffrent type of ee instructions
 
@@ -158,11 +160,11 @@
 ;; Registers all instructions 
 ;;
 
-(make-ee-instructions (make-encoding :inst 26 :rs 21 :rt 16 :imm 0 :type 0 :func #'inst-type0)
+(make-ee-instructions (make-encoding :inst 26 :rs 16 :rt 21 :imm 0 :type 0 :func #'inst-type0)
 											'((addi #b001000) (addiu #b001001) (andi #b001100) (daddi #b011000) (daddiu #b011001)
-											  (lui  #b001111) (ori   #b001101) (slti #b001010) (sltiu #b001011) (xori   #b001110)
+											  (ori   #b001101) (slti #b001010) (sltiu #b001011) (xori   #b001110)
 												(lb  #b100000) (lbu #b100100) (ld  #b110111) (ldl #b011010) (ldr #b011011)
-												(lwl #b100010) (lh  #b100000) (lhu #b100001) (lw  #b100011) (lq  #b011110)
+												(lwl #b100010) (lh  #b100001) (lhu #b100101) (lw  #b100011) (lq  #b011110)
 												(lwl #b100010) (lwr #b100110) (lwu #b100111)
 												(sb  #b101000) (sd  #b111111) (sdl #b101100) (sdr #b101101) (sh  #b101001)
 												(sw  #b101011) (swl #b101010) (swr #b101110) (sq  #b011111)
@@ -183,27 +185,27 @@
 												(sllv  #b000100) (slt   #b101010) (sltu  #b101011) (srav  #b000111) (srlv  #b000110)
 												(sub   #b100010) (subu  #b100011) (xor   #b100110)))
 
-(make-ee-instructions (make-encoding :spec #b011100 :fixed #b001000 :inst 0 :rs 21 :rt 16 :rd 11 :type 1 :func #'inst-type1)
+(make-ee-instructions (make-encoding :spec #b011100 :fixed #b001000 :inst 6 :rs 21 :rt 16 :rd 11 :type 1 :func #'inst-type1)
 											'((paddb  #b01000) (paddh  #b00100) (paddsb #b11000) (paddsh #b10100) (paddsw #b11000)
-												(paddw  #b00100) (pcgtb  #b01010) (pcgth  #b00110) (pcgtw  #b00100) (pext5  #b11110)
+												(paddw  #b00000) (pcgtb  #b01010) (pcgth  #b00110) (pcgtw  #b00100) (pext5  #b11110)
 												(pextlb #b11010) (pextlh #b10110) (pextlw #b10010) (pmaxh  #b00111) (pmaxw  #b00011)
 												(ppac5  #b11111) (ppacb  #b11011) (ppach  #b10111) (ppacw  #b10011) (psubb  #b01001)
 												(psubh  #b00101) (psubsb #b11001) (psubsh #b10101) (psubsw #b10001) (psubw  #b00001)))
 
-(make-ee-instructions (make-encoding :spec #b011100 :fixed #b101000 :inst 0 :rs 21 :rt 16 :rd 11 :type 1 :func #'inst-type1)
+(make-ee-instructions (make-encoding :spec #b011100 :fixed #b101000 :inst 6 :rs 21 :rt 16 :rd 11 :type 1 :func #'inst-type1)
 											'((pabsh  #b00101) (pabsw  #b00001) (paddub #b11000) (padduh #b10100) (padduw #b10000)
 												(padsbh #b00100) (pceqb  #b01010) (pceqh  #b00110) (pceqw  #b00010) (pextub #b11010)
 												(pextuh #b10110) (pextuw #b10010) (pminh  #b00111) (pminw  #b00011) (psubub #b11001)
 												(psubuh #b10101) (psubuw #b10001) (qfsrv  #b11011)))
 
-(make-ee-instructions (make-encoding :spec #b011100 :fixed #b001001 :inst 0 :rs 21 :rt 16 :rd 11 :type 1 :func #'inst-type1)
+(make-ee-instructions (make-encoding :spec #b011100 :fixed #b001001 :inst 6 :rs 21 :rt 16 :rd 11 :type 1 :func #'inst-type1)
 											'((pand   #b10010) (pcpyld #b01110) (pdivbw #b11101) (pexeh  #b11010) (pexew  #b11110)
 												(phmadh #b10001) (phmsbh #b10101) (pinth  #b01010) (pmaddh #b10000) (pmaddw #b00000)
 												(pmfhi  #b01000) (pmflo  #b01001) (pmsubh #b10100) (pmsubw #b00100) (pmulth #b11100)
 												(pmultw #b01100) (prevh  #b11011) (prot3w #b11111) (psllvw #b00010) (psrlvw #b00011)
 												(pxor   #b01001)))
 
-(make-ee-instructions (make-encoding :spec #b011100 :fixed #b101001 :inst 0 :rs 21 :rt 16 :rd 11 :type 1 :func #'inst-type1)
+(make-ee-instructions (make-encoding :spec #b011100 :fixed #b101001 :inst 6 :rs 21 :rt 16 :rd 11 :type 1 :func #'inst-type1)
 											'((pcpyh  #b11001) (pcpyud #b01110) (pdivw  #b01101) (pdivuw #b01001) (pexch  #b11010)
 												(pexcw  #b11110) (pinteh #b01010) (pmadduw #b00000) 
 												(psllh #b111100) (psllw #b111101) (psravw #b111101) (psrlh #b111101) (psrlvw #b111101)
@@ -225,6 +227,9 @@
 
 (make-ee-instructions (make-encoding :spec 0 :inst 26 :rs 21 :imm 0 :type 2 :func #'inst-type2)
 											'((pref #b110011)))
+
+(make-ee-instructions (make-encoding :spec 0 :inst 26 :rs 16 :imm 0 :type 2 :func #'inst-type2)
+											'((lui #b001111)))
 
 (make-ee-instructions (make-encoding :inst 26 :imm 0 :type 3 :func #'inst-type3)
 											'((j #b00010) (jal #b00011)))
