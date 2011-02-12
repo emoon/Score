@@ -132,7 +132,7 @@
 (def-inst-type inst-type3 (() #x0000ffff)) 
 (def-inst-type inst-type4 ((rt rs))) 
 (def-inst-type inst-type5 ((rt))) 
-; (def-inst-type inst-type6 (())) 
+(def-inst-type inst-type6 (())) 
 
 ;; fpu instructions
 
@@ -244,8 +244,8 @@
 (make-ee-instructions (make-encoding :spec #b011100 :fixed #b001000 :inst 6 :rs 16 :rt 11 :type 4 :func #'inst-type4)
                       '((pext5  #b11110) (ppac5 #b11111)))
 
-(make-ee-instructions (make-encoding :spec #b011100 :fixed 0 :inst 0 :rs 21 :rt 16 :type 4 :func #'inst-type4)
-                      '((pdivbw #b11101001001 ) (pdivw  #b01101001001 ) (pdivuw #b01101 101001 )))
+(make-ee-instructions (make-encoding :spec #b011100 :imm 0 :fixed 0 :inst 0 :rs 21 :rt 16 :type 4 :func #'inst-type4)
+                      '((pdivbw #b11101001001 ) (pdivw  #b01101001001 ) (pdivuw #b01101101001 )))
 
 (make-ee-instructions (make-encoding :spec #b011100 :fixed 0 :inst 0 :rs 16 :rt 11 :type 4 :func #'inst-type4)
                       '((pexeh  #b11010001001 ) (pabsh #b00101101000 ) (pabsw #b00001101000 ) (pexew  #b11110001001 )))
@@ -259,17 +259,18 @@
 (make-ee-instructions (make-encoding :spec 0 :inst 0 :rt 21 :imm 0 :type 5 :func #'inst-type5)
                       '((jr #b001000))) 
 
-(make-ee-instructions (make-encoding :spec #b011100 :fixed #b001001 :inst 6 :rt 16 :type 5 :func #'inst-type5)
+(make-ee-instructions (make-encoding :spec #b011100 :fixed #b001001 :inst 6 :rt 11 :type 5 :func #'inst-type5)
                        '((pmfhi  #b01000) (pmflo  #b01001)))
 
 (make-ee-instructions (make-encoding :spec #b011100 :imm 0 :inst 0 :rt 11 :type 5 :func #'inst-type5) 
                        '((pmfhl.lh  #b00011110000) (pmfhl.lw #b00000110000) (pmfhl.sh #b00100110000)
-                         (pmfhl.slw #b00010110000) (pmfhl.uw #b00001110000) (pmthi    #b01000101001)
-                         (pmthl.lw  #b00000110001) (pmtlo     #b01001101001)))
+                         (pmfhl.slw #b00010110000) (pmfhl.uw #b00001110000))) 
 
+(make-ee-instructions (make-encoding :spec #b011100 :imm 0 :inst 0 :rt 21 :type 5 :func #'inst-type5) 
+                       '((pmthi #b01000101001) (pmthl.lw  #b00000110001) (pmtlo #b01001101001)))
 
-; (make-ee-instructions (make-encoding :inst 0 :type 6 :func #'inst-type6) 
-;                       '((sync #b001111) (sync.l #b001111) (sync.p #b101111)))
+(make-ee-instructions (make-encoding :inst 0 :type 6 :func #'inst-type6) 
+                      '((sync #b00000001111) (sync.l #b00000001111) (sync.p #b10000001111)))
 
 ;;
 ;; fpu instructions
