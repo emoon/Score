@@ -50,7 +50,12 @@
             (3 (format stream "(~(~s~) 12)~%" instruction))   
             (4 (format stream "(~(~s~) r2 r3)~%" instruction))
             (5 (format stream "(~(~s~) r2)~%" instruction))   
-            (6 (format stream "(~(~s)~)~%" instruction)))))))
+            (6 (format stream "(~(~s~))~%" instruction))
+            (7 (format stream "(~(~s~) f2 f3)~%" instruction))
+            (8 (format stream "(~(~s~) f2 f3 f4)~%" instruction))
+            (9 (format stream "(~(~s~) f2 f3 12)~%" instruction))
+            (10 (format stream "(~(~s~) r2 f3)~%" instruction))
+)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Implementing the mips (r5900 assembler here)
@@ -58,12 +63,12 @@
 ;;; Loots of testing / hacking around currently
 ;;;
 
-(defmacro make-ee-registers-hash ()
+(defmacro make-ee-registers-hash (prefix)
   (let ((hash (make-hash-table :test #'eq)))
-    (loop for i from 0 to 31 collecting (setf (gethash (intern (format nil "R~d" i)) hash) i)) hash))
+    (loop for i from 0 to 31 collecting (setf (gethash (intern (format nil "~S~d" prefix i)) hash) i)) hash))
 
-(defparameter *ee-registers* (make-ee-registers-hash)) 
-(defparameter *fpu-registers* nil) 
+(defparameter *ee-registers* (make-ee-registers-hash R))
+(defparameter *fpu-registers* (make-ee-registers-hash F))
 (defparameter *register-type-lut* '(rs *ee-registers* rt *ee-registers* rd *ee-registers*
                                     fs *fpu-registers* ft *fpu-registers* fd *fpu-registers*))
 
@@ -136,13 +141,14 @@
 
 ;; fpu instructions
 
-(def-inst-type fpu-inst0 ((ft fs))) 
-(def-inst-type fpu-inst1 ((ft fs fd))) 
-(def-inst-type fpu-inst2 ((rt rs))) 
+(def-inst-type fpu-type0 ((ft fs) #x0000ffff)) 
+(def-inst-type fpu-type1 ((fd fs ft))) 
+(def-inst-type fpu-type2 ((fd fs))) 
+(def-inst-type fpu-type3 ((rt fs))) 
 
 ;;; List over all ee - instructions
 
-(defparameter *instruction-vector* (make-array 200))
+(defparameter *instruction-vector* (make-array 250))
 (defparameter *current-instruction* 0)
 
 (defun make-ee-instructions (enc opcode-list) 
@@ -239,7 +245,7 @@
 
 (make-ee-instructions (make-encoding :spec 1 :inst 16 :rs 21 :imm 0 :type 2 :func #'inst-type2)
                       '((teqi #b01100) (tgei  #b01000) (tgeiu #b01001)
-                         (tlti #b01010) (tltiu #b01011) (tnei  #b01110)))
+                        (tlti #b01010) (tltiu #b01011) (tnei  #b01110)))
 
 (make-ee-instructions (make-encoding :spec #b011100 :fixed #b001000 :inst 6 :rs 16 :rt 11 :type 4 :func #'inst-type4)
                       '((pext5  #b11110) (ppac5 #b11111)))
@@ -276,55 +282,34 @@
 ;; fpu instructions
 ;;
 
-; (make-ee-instructions (make-encoding :spec #b010001 :fix #x200000 :inst 0 :fs 11 :rd 6 :func #'fpu-type0)
-;                        '(
+(make-ee-instructions (make-encoding :imm 0 :inst 26 :fs 21 :ft 16 :type 9 :func #'fpu-type0)
+                      '((lwc1 #b110001) (swc1 #b111001)))
+
+(make-ee-instructions (make-encoding :spec #b010001 :fixed #x2000000 :inst 0 :fs 11 :fd 6 :type 7 :func #'fpu-type2)
+                      '((abs.s #b000101) (cvt.w.t #b100100) (mov.s #b000110) (neg.s #b000111)))
+
+(make-ee-instructions (make-encoding :spec #b010001 :fixed #x2000000 :inst 0 :fs 16 :fd 11 :type 7 :func #'fpu-type2)
+                      '((adda.s #b011000) (madda.s #b011110) (msuba.s #b011111) (mula.s #b011010) (suba.s #b011001) 
+                        (c.eq.s #b110010) (c.f.s   #b110000) (c.le.s  #b110110) (c.lt.s #b110100)))
+
+(make-ee-instructions (make-encoding :spec #b010001 :fixed #x2000000 :inst 0 :fs 16 :fd 6 :type 7 :func #'fpu-type2)
+                      '((sqrt.s #b000100)))
+
+(make-ee-instructions (make-encoding :spec #b010001 :fixed #x2800000 :inst 0 :fs 11 :fd 6 :type 7 :func #'fpu-type2)
+                      '((ctv.s.w #b100000)))
+
+(make-ee-instructions (make-encoding :spec #b010001 :fixed #x2000000 :inst 0 :ft 16 :fs 11 :fd 6 :type 8 :func #'fpu-type1)
+                      '((add.s  #b000000) (div.s #b000011) (madd.s  #b011100) (max.s #b101000) (min.s #b101001)
+                        (msub.s #b011101) (mul.s #b000010) (rsqrt.s #b010110) (sub.s #b000001)))
+
+(make-ee-instructions (make-encoding :spec #b010001 :fixed #x1000000 :inst 16 :type 3 :func #'inst-type3) 
+                      '((bc1f #b00000) (bc1fl #b00010) (bc1t #b00001) (bc1tl #b00011)))
+
+(make-ee-instructions (make-encoding :spec #b010001 :fixed 0 :rt 16 :fs 11 :inst 21 :type 10 :func #'fpu-type3) 
+                      '((mfc1 #b00000) (mtc1 #b00100)))
 
 (defparameter *mips-instructions-temp* 
            '(
-
-             ;; trap
-
-             ;; misc
-
-             ;; MMI instructions
-
-             ;; Float ops
-
-             (abs.s   #b000101)
-             (add.s   #b000000)
-             (adda.s  #b000000)
-             (div.s   #b000011)
-             (lwc1    #b110001)
-             (madd.s  #b000000)
-             (madda.s #b000000)
-             (max.s   #b000000)
-             (min.s   #b000000)
-             (msub.s  #b000000)
-             (msuba.s #b000000)
-             (mul.s   #b000000)
-             (mula.s  #b000000)
-             (suba.s  #b000000)
-             (swc1    #b111001)
-
-             (c.eq.s  #b011010 :fcmp-type)
-             (c.f.s   #b011000 :fcmp-type)
-             (c.le.s  #b011011 :fcmp-type)
-             (c.lt.s  #b011010 :fcmp-type)
-
-             (cvt.s.w #b100000 :fcon-type)
-             (cvt.w.t #b100100 :fcon-type)
-
-             (bc1f    #b000000 :fbranch-type)
-             (bc1fl   #b000010 :fbranch-type)
-             (bc1t    #b000001 :fbranch-type)
-             (bc1tl   #b000011 :fbranch-type)
-
-             (mov.s   #b000000 :fmov-type)
-             (mfc1    #b000000 :fftc1-type)
-             (mtc1    #b000100 :fftc1-type)
-
-             (rsqrt.s #b000000 :frsqrt-type)
-             (sqrt.s  #b000000 :fsqrt-type)
 
              ;; cop-0 instructions (section non-functional but here to be implemented)
 
