@@ -7,56 +7,6 @@
       (loop for i = (read stream nil end)
         while (not (eq i end)) collect i)))) 
 
-;;; Very rought testing right now
-
-(defun test-ee-parse ()
-  (let ((forms (read-score-file "../tests/ps2/test0.score")))
-    ;; forms has the lists of the 
-    (when forms
-      (let ((inner (car forms)))
-        ; first entry here should be a def-ee-fun
-        ; notice will be proper parsing here, this is just for test
-        (when (eql (car inner) 'def-ee-fun)
-          (loop for i in (nthcdr 3 inner) do  ; skip the function name and assume no in-parameters
-            ; here we can start pushing out the instructions but just printing now
-            (print i)))))))
-
-;;;
-;;;
-;;; Test code
-;;;
-
-(defun test-write-instructions (instructions)
-  (with-open-file (stream "c:/temp/out.bin" 
-                           :direction :output 
-                           :if-exists :overwrite
-                           :element-type '(unsigned-byte 8))
-    (loop for i in instructions do
-      (encode-ee-instruction stream i))))
-;;
-;;
-;;
-
-(defun gen-rand-inst () 
-   (with-open-file (stream "c:/temp/code.txt" :direction :output :if-exists :overwrite)
-     (loop for i from 0 to (hash-table-count *mips-instructions*) do
-         (let* ((instruction (aref *instruction-vector* i))
-               (instruction-info (gethash instruction *mips-instructions*))
-               (type (encoding-type (second instruction-info))))
-          (case type 
-            (0 (format stream "(~(~s~) r2 r3 12)~%" instruction))   
-            (1 (format stream "(~(~s~) r2 r3 r4)~%" instruction))   
-            (2 (format stream "(~(~s~) r2 12)~%" instruction))   
-            (3 (format stream "(~(~s~) 12)~%" instruction))   
-            (4 (format stream "(~(~s~) r2 r3)~%" instruction))
-            (5 (format stream "(~(~s~) r2)~%" instruction))   
-            (6 (format stream "(~(~s~))~%" instruction))
-            (7 (format stream "(~(~s~) f2 f3)~%" instruction))
-            (8 (format stream "(~(~s~) f2 f3 f4)~%" instruction))
-            (9 (format stream "(~(~s~) f2 f3 12)~%" instruction))
-            (10 (format stream "(~(~s~) r2 f3)~%" instruction))
-)))))
-
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Implementing the mips (r5900 assembler here)
 ;;;
@@ -67,13 +17,11 @@
   (let ((hash (make-hash-table :test #'eq)))
     (loop for i from 0 to 31 collecting (setf (gethash (intern (format nil "~S~d" prefix i)) hash) i)) hash))
 
+(defparameter *mips-instructions* (make-hash-table :test #'eq))
 (defparameter *ee-registers* (make-ee-registers-hash R))
 (defparameter *fpu-registers* (make-ee-registers-hash F))
 (defparameter *register-type-lut* '(rs *ee-registers* rt *ee-registers* rd *ee-registers*
                                     fs *fpu-registers* ft *fpu-registers* fd *fpu-registers*))
-
-(defun print-hash-entry (key value)
-    (format t "The value associated with the key ~S is ~S~%" key value))
 
 ;;; write value to the stream
 
@@ -85,9 +33,7 @@
 
 (defstruct encoding inst (spec 0) rd rs rt (imm 0) (fixed 0) fs ft fd (type 0) func)
 
-;;
 ;; encode instruction
-;;
 
 (defun encode-ee-instruction (stream instruction)
   (let ((instruction-info (gethash (first instruction) *mips-instructions*)))
@@ -95,9 +41,11 @@
       (error (format nil "Invalid instruction name ~{~a~^, ~}" instruction)))
     (funcall (encoding-func (second instruction-info)) stream (first instruction-info) instruction (second instruction-info))))
 
-;;
+(defun make-ee-instructions (enc opcode-list) 
+  (loop for i in opcode-list do 
+    (setf (gethash (first i) *mips-instructions*) (list (second i) enc))))
+
 ;; builds the diffrent instruction types based on the inst-layout data
-;;
 
 (defmacro def-inst-type (name inst-layout)
  `(progn
@@ -143,33 +91,17 @@
 (def-inst-type fpu-type2 ((fd fs))) 
 (def-inst-type fpu-type3 ((rt fs))) 
 
-;;; List over all ee - instructions
 
-(defparameter *instruction-vector* (make-array 300))
-(defparameter *current-instruction* 0)
-
-(defun make-ee-instructions (enc opcode-list) 
-  (loop for i in opcode-list do 
-    (setf (gethash (first i) *mips-instructions*) (list (second i) enc))
-    (setf (aref *instruction-vector* *current-instruction*) (first i))
-    (incf *current-instruction*)))
-
-;;; instruction encoding
-
-(defparameter *mips-instructions* (make-hash-table :test #'eq))
-
-;;
 ;; Registers all instructions 
-;;
 
 (make-ee-instructions (make-encoding :inst 26 :rs 16 :rt 21 :imm 0 :type 0 :func #'inst-type0)
                       '((addi #b001000) (addiu #b001001) (andi #b001100) (daddi #b011000) (daddiu #b011001)
-                        (ori   #b001101) (slti #b001010) (sltiu #b001011) (xori   #b001110)
+                        (ori #b001101) (slti #b001010) (sltiu #b001011) (xori   #b001110)
                         (lb  #b100000) (lbu #b100100) (ld  #b110111) (ldl #b011010) (ldr #b011011)
                         (lwl #b100010) (lh  #b100001) (lhu #b100101) (lw  #b100011) (lq  #b011110)
                         (lwl #b100010) (lwr #b100110) (lwu #b100111) (sb  #b101000) (sd  #b111111) 
-      (sdl #b101100) (sdr #b101101) (sh  #b101001) (sw  #b101011) (swl #b101010) 
-      (swr #b101110) (sq  #b011111)))
+                        (sdl #b101100) (sdr #b101101) (sh  #b101001) (sw  #b101011) (swl #b101010) 
+                        (swr #b101110) (sq  #b011111)))
 
 (make-ee-instructions (make-encoding :inst 26 :rs 21 :rt 16 :imm 0 :type 0 :func #'inst-type0)
                       '((beq  #b000100) (beql #b000100) (bne  #b000101) (bnel #b010101)))
@@ -185,11 +117,11 @@
 (make-ee-instructions (make-encoding :spec 0 :inst 0 :rs 16 :rt 21 :rd 11 :type 1 :func #'inst-type1)
                       '((add   #b100000) (addu  #b100001) (and   #b100100) (dadd  #b101100) (daddu #b101101) 
                         (dsub  #b101110) (dsubu #b101111) (movn  #b001011) (movz  #b001010) (nor   #b100111) 
-      (or    #b100101) (slt   #b101010) (sltu  #b101011)))
+                        (or    #b100101) (slt   #b101010) (sltu  #b101011)))
 
 (make-ee-instructions (make-encoding :spec 0 :inst 0 :rs 21 :rt 16 :rd 11 :type 1 :func #'inst-type1)
                       '((dsllv #b010100) (dsrav #b010111) (dsrlv #b010110) (sllv  #b000100) 
-      (srav  #b000111) (srlv  #b000110)))
+                        (srav  #b000111) (srlv  #b000110)))
 
 (make-ee-instructions (make-encoding :spec #b011100 :fixed #b001000 :inst 6 :rs 16 :rt 21 :rd 11 :type 1 :func #'inst-type1)
                       '((paddb  #b01000) (paddh  #b00100) (paddsb #b11000) (paddsh #b10100) (paddsw #b10000)
@@ -281,9 +213,7 @@
 (make-ee-instructions (make-encoding :inst 0 :type 6 :func #'inst-type6) 
                       '((sync #b00000001111) (sync.l #b00000001111) (sync.p #b10000001111)))
 
-;;
 ;; fpu instructions
-;;
 
 (make-ee-instructions (make-encoding :imm 0 :inst 26 :fs 21 :ft 16 :type 9 :func #'fpu-type0)
                       '((lwc1 #b110001) (swc1 #b111001)))
@@ -311,9 +241,7 @@
 (make-ee-instructions (make-encoding :spec #b010001 :fixed 0 :rt 16 :fs 11 :inst 21 :type 10 :func #'fpu-type3) 
                       '((mfc1 #b00000) (mtc1 #b00100)))
 
-;;
 ;; cop-0 instructions
-;;
 
 (make-ee-instructions (make-encoding :spec #b010000 :fixed #x1000000 :inst 16 :type 3 :func #'inst-type3) 
                       '((bc0f #b00000) (bc0fl #b00010) (bc0t #b00001) (bc0tl #b00011)))
