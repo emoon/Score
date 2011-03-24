@@ -5,7 +5,27 @@
   (with-open-file (stream filename)
     (let ((end (gensym "end")))
       (loop for i = (read stream nil end)
-        while (not (eq i end)) collect i)))) 
+	 while (not (eq i end)) collect i)))) 
+
+(defun test-loop ()
+  (dotimes (test 100)
+    (format t "test ~a~%" test)))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; Implements a very basic register allocator for given code.
+;;; Currently doesn't track depth of loops/etc so it's extremly naive but a start
+;;; 
+;;; This code expects to get a function with (expanded assembly) 
+
+(defparameter *test-code* '(def-ee-fun test-ee-code (test1)
+			    (move loop-counter test1)
+   			    (loop:)
+   			      (addi loop-counter loop-counter -1)
+   			      (bne loop-counter loop:)
+   			      (nop)))
+
+(defun allocate-registers (code)
+  (values code))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Implementing the mips (r5900 assembler here)
@@ -41,38 +61,38 @@
       (error (format nil "Invalid instruction name ~{~a~^, ~}" instruction)))
     (funcall (encoding-func (second instruction-info)) stream (first instruction-info) instruction (second instruction-info))))
 
-(defun make-ee-instructions (enc opcode-list) 
+(defun make-ee-instructions (enc opcode-list)
   (loop for i in opcode-list do 
     (setf (gethash (first i) *mips-instructions*) (list (second i) enc))))
 
 ;; builds the diffrent instruction types based on the inst-layout data
 
 (defmacro def-inst-type (name inst-layout)
- `(progn
-    (defun ,name (stream instruction arguments enc)
-      (let ((code 0))
-        ,(when (first inst-layout)
-          ;; Generate the let for all the registers
-          `(let ,(loop for i in (first inst-layout) for c from 1 collecting 
-            `(,i (gethash (nth ,c arguments) ,(getf *register-type-lut* i))))
-            ;; error checking for all the registers
-          ,@(loop for i in (first inst-layout) for c from 1 collect
-            `(when (not ,i) 
-              (error (format nil "Invalid register name ~s" (nth ,c arguments)))))
-        ;; encode the registers
-        (setf code (logior ,@(loop for i in (first inst-layout) collecting 
-          `(ash ,i ,(read-from-string (format nil "(ENCODING-~A ENC)" i))))))))
-      ;; if we have a length of 2 in the list then we have imm value also and it needs to be a number 
-      ,(when (eql (length inst-layout) 2)
-        (let ((imm-arg (+ (length (first inst-layout)) 1)))
-          ;`(when (not (numberp (nth ,imm-arg arguments)))
-          ;  (error (format nil "Invalid immediate ~s" (nth ,imm-arg arguments))))
-            ;; encode the immediate value
-          `(setf code (logior code (ash (logand (nth ,imm-arg arguments) ,(second inst-layout))  (encoding-imm enc))))))
-      (write-value stream (logior code 
-                                  (ash instruction (encoding-inst enc)) 
-                                  (ash (encoding-spec enc) 26) 
-                                  (encoding-fixed enc)) 4)))))
+  `(progn
+     (defun ,name (stream instruction arguments enc)
+       (let ((code 0))
+	 ,(when (first inst-layout)
+		;; Generate the let for all the registers
+		`(let ,(loop for i in (first inst-layout) for c from 1 collecting 
+			    `(,i (gethash (nth ,c arguments) ,(getf *register-type-lut* i))))
+		   ;; error checking for all the registers
+		   ,@(loop for i in (first inst-layout) for c from 1 collect
+			  `(when (not ,i) 
+			     (error (format nil "Invalid register name ~s" (nth ,c arguments)))))
+		   ;; encode the registers
+		   (setf code (logior ,@(loop for i in (first inst-layout) collecting 
+					     `(ash ,i ,(read-from-string (format nil "(ENCODING-~A ENC)" i))))))))
+	 ;; if we have a length of 2 in the list then we have imm value also and it needs to be a number 
+	 ,(when (eql (length inst-layout) 2)
+		(let ((imm-arg (+ (length (first inst-layout)) 1)))
+					;`(when (not (numberp (nth ,imm-arg arguments)))
+					;  (error (format nil "Invalid immediate ~s" (nth ,imm-arg arguments))))
+		  ;; encode the immediate value
+		  `(setf code (logior code (ash (logand (nth ,imm-arg arguments) ,(second inst-layout))  (encoding-imm enc))))))
+	 (write-value stream (logior code 
+				     (ash instruction (encoding-inst enc)) 
+				     (ash (encoding-spec enc) 26) 
+				     (encoding-fixed enc)) 4)))))
 
 ;; diffrent type of ee instructions
 
