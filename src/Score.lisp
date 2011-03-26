@@ -18,14 +18,59 @@
 ;;; This code expects to get a function with (expanded assembly) 
 
 (defparameter *test-code* '(def-ee-fun test-ee-code (test1)
-			    (move loop-counter test1)
-   			    (loop:)
+			    (addi loop-counter test1 0)
+   			    (:loop)
    			      (addi loop-counter loop-counter -1)
-   			      (bne loop-counter loop:)
-   			      (nop)))
+   			      (addi loop-counter loop-counter -1)
+   			      (bne loop-counter :loop)
+   			      (addi r0 r0 r0)
+   			    (:loop2)
+   			      (addi loop-counter loop-counter -1)
+   			      (bne loop-counter :loop2)
+   			      (addi r0 r0 r0)))
 
 (defun allocate-registers (code)
   (values code))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; Fixes up local branches on labels
+;;;
+
+(defun fixup-local-branches (code-temp)
+  ; "Fixes up local branches on lables. assumes that the code is in correct format and has already been paresed/error checked"
+  ; first pass is to find all labels and also to make sure that we don't have labels more than once
+  ; we also skip the function defenition here
+  (let ((label-table (make-hash-table :test #'eq))
+	(offset 0)
+	(code (copy-list code-temp))
+        (new-code))
+    (loop for i in (nthcdr 3 code) do 
+       ; ok, this might not be the best approach but should be fine. If instruction wasn't found we assume that it's a label
+       (if (gethash (car i) *mips-instructions*)
+	  (setf offset (+ 4 offset))
+	  (progn
+	    (when (gethash (car i) label-table)
+	      (error (format nil "Label ~a found more than once in ~a" (car i) (car code))))
+	      (setf (gethash (car i) label-table) offset))))
+    (setf offset 0)
+    ; append the function def
+    (setf new-code (append new-code (list (nth 0 code))))
+    (setf new-code (append new-code (list (nth 1 code))))
+    (setf new-code (append new-code (list (nth 2 code))))
+    (loop for i in (nthcdr 3 code) do
+       ; ths may actually back fire later because we are looking for branch instructions in the func declaration as well
+       (unless (gethash (car i) label-table)
+	 (setf offset (+ 4 offset))
+	  ; lets see if instruction is a branch
+         (if (find (car i) '(beq beql bne bnel bgtz bgtzl blez blezl))
+	   (progn
+  	     (let ((code-offset (gethash (car (last i)) label-table)))
+	       (unless code-offset 
+	          (error (format nil "Unable to find ~a label" (car (last i)))))
+	       (setf new-code (append new-code (list (append (nbutlast i) (list (- code-offset offset)))))))))
+	   (setf new-code (append new-code (list i)))))
+    (values new-code)))
+    
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Implementing the mips (r5900 assembler here)
