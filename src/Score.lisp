@@ -1,6 +1,8 @@
 ;;; This function will parse a whole score file to lists to be processed  
 ;;; We might want to track line/similar things for better error reporting later
 
+(defparameter *mips-instructions* (make-hash-table :test #'eq))
+
 (defun read-score-file (filename)
   (with-open-file (stream filename)
     (let ((end (gensym "end")))
@@ -11,26 +13,63 @@
   (dotimes (test 100)
     (format t "test ~a~%" test)))
 
+; test code
+
+(defparameter *test-code* '(def-ee-fun test-ee-code (test1)
+			    (addi loop-counter test1 0)
+   			    (:loop)
+   			      (addi loop-counter loop-counter -1)
+   			      (bne loop-counter :loop)
+   			      (addi r0 r0 r0)
+			      (jr r31)))
+
+(defparameter *test-code2* '(def-ee-fun test-ee-code (test1)
+			     (addi loop-counter test1 0)
+		             (addi loop-counter loop-counter -1)
+   			     (bne r0 loop-counter -1)
+   			     (addi r0 r0 r0)
+			     (jr r31)))
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Implements a very basic register allocator for given code.
 ;;; Currently doesn't track depth of loops/etc so it's extremly naive but a start
 ;;; 
 ;;; This code expects to get a function with (expanded assembly) 
 
-(defparameter *test-code* '(def-ee-fun test-ee-code (test1)
-			    (addi loop-counter test1 0)
-   			    (:loop)
-   			      (addi loop-counter loop-counter -1)
-   			      (addi loop-counter loop-counter -1)
-   			      (bne loop-counter :loop)
-   			      (addi r0 r0 r0)
-   			    (:loop2)
-   			      (addi loop-counter loop-counter -1)
-   			      (bne loop-counter :loop2)
-   			      (addi r0 r0 r0)))
-
 (defun allocate-registers (code)
-  (values code))
+  ; local function to get the register
+ (let ((register-table (make-hash-table :test #'eq))
+       (current-reg 4)
+       (new-code))
+  (labels ((get-param (reg)
+    (cond
+      ((gethash reg *mips-instructions*) reg)
+      ((gethash reg *ee-registers*) reg)
+      ((numberp reg) reg)
+      ((gethash reg register-table) (gethash reg register-table))
+      ; if we didn't find the register/value above we need to handle it here
+      (t (progn 
+	(let ((register (gethash reg register-table))
+              (reg-name))
+	  ; not found, assign it a register and return
+	  (unless register
+	    (setf reg-name (intern (format nil "R~d" current-reg)))
+	    (setf (gethash reg register-table) reg-name))
+	    (incf current-reg)
+	  (values reg-name)))))))
+      ; only handle 4 arguments right now
+      (when (> (length (third code)) 4)
+        (error (format nil "More than 4 arguments~%")))
+      ; first handle the input registers which are r4 - r7
+      (loop for i in (third code) for r in '(r4 r5 r6 r7) do
+         (incf current-reg)
+         (setf (gethash i register-table) r))
+      ; insert the function header (not actually used but here for info)
+      (setf new-code (append new-code (subseq code 0 3))) 
+      ; loop all code and allocate/insert registers
+      (loop for i in (nthcdr 3 code) do
+        (setf new-code (append new-code (list (loop for c in i collect (get-param c))))))
+      (values new-code))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Fixes up local branches on labels
@@ -47,20 +86,18 @@
     (loop for i in (nthcdr 3 code) do 
        ; ok, this might not be the best approach but should be fine. If instruction wasn't found we assume that it's a label
        (if (gethash (car i) *mips-instructions*)
-	  (setf offset (+ 4 offset))
+	  (incf offset)
 	  (progn
 	    (when (gethash (car i) label-table)
 	      (error (format nil "Label ~a found more than once in ~a" (car i) (car code))))
 	      (setf (gethash (car i) label-table) offset))))
     (setf offset 0)
     ; append the function def
-    (setf new-code (append new-code (list (nth 0 code))))
-    (setf new-code (append new-code (list (nth 1 code))))
-    (setf new-code (append new-code (list (nth 2 code))))
+    (setf new-code (append new-code (subseq code 0 3))) 
     (loop for i in (nthcdr 3 code) do
        ; ths may actually back fire later because we are looking for branch instructions in the func declaration as well
        (unless (gethash (car i) label-table)
-	 (setf offset (+ 4 offset))
+	 (incf offset)
 	  ; lets see if instruction is a branch
          (if (find (car i) '(beq beql bne bnel bgtz bgtzl blez blezl))
 	   (progn
@@ -70,7 +107,6 @@
 	       (setf new-code (append new-code (list (append (nbutlast i) (list (- code-offset offset)))))))))
 	   (setf new-code (append new-code (list i)))))
     (values new-code)))
-    
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Implementing the mips (r5900 assembler here)
@@ -82,7 +118,6 @@
   (let ((hash (make-hash-table :test #'eq)))
     (loop for i from 0 to 31 collecting (setf (gethash (intern (format nil "~S~d" prefix i)) hash) i)) hash))
 
-(defparameter *mips-instructions* (make-hash-table :test #'eq))
 (defparameter *ee-registers* (make-ee-registers-hash R))
 (defparameter *fpu-registers* (make-ee-registers-hash F))
 (defparameter *register-type-lut* '(rs *ee-registers* rt *ee-registers* rd *ee-registers*
