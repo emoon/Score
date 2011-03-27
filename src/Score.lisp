@@ -9,26 +9,39 @@
       (loop for i = (read stream nil end)
 	 while (not (eq i end)) collect i)))) 
 
-(defun test-loop ()
-  (dotimes (test 100)
-    (format t "test ~a~%" test)))
-
 ; test code
 
-(defparameter *test-code* '(def-ee-fun test-ee-code (test1)
-			    (addi loop-counter test1 0)
+(defparameter *test-code* '(def-ee-fun test-ee-code (test1) (addi loop-counter test1 0)
    			    (:loop)
    			      (addi loop-counter loop-counter -1)
-   			      (bne loop-counter :loop)
-   			      (addi r0 r0 r0)
-			      (jr r31)))
+   			      (bne r0 loop-counter :loop)
+   			      (addi r0 r0 0)
+			    (jr r31)))
 
-(defparameter *test-code2* '(def-ee-fun test-ee-code (test1)
-			     (addi loop-counter test1 0)
-		             (addi loop-counter loop-counter -1)
-   			     (bne r0 loop-counter -1)
-   			     (addi r0 r0 r0)
-			     (jr r31)))
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defun compile-score-code (input-code)
+  (let ((code input-code))
+     ; fix branches
+     (setf code (fixup-local-branches code))
+     ; allocate registers
+     (setf code (allocate-registers code))
+     ;(format t "~{~a~^, ~}~%" code)
+     (with-open-file (stream "c:/temp/out.bin" 
+                              :direction :output 
+                              :if-exists :overwrite
+                              :element-type '(unsigned-byte 8))
+        (loop for i in (nthcdr 3 code) do
+	  (format t "~{~a~^, ~}~%" i)
+          (encode-ee-instruction stream i)))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Compile a score function and output a binary blob
+;;
+
+(defun build-score-file (filename)
+  (let (code (read-score-file filename))
+    (compile-score-code code)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Implements a very basic register allocator for given code.
@@ -41,7 +54,7 @@
  (let ((register-table (make-hash-table :test #'eq))
        (current-reg 4)
        (new-code))
-  (labels ((get-param (reg)
+  (flet ((get-param (reg)
     (cond
       ((gethash reg *mips-instructions*) reg)
       ((gethash reg *ee-registers*) reg)
@@ -104,8 +117,8 @@
   	     (let ((code-offset (gethash (car (last i)) label-table)))
 	       (unless code-offset 
 	          (error (format nil "Unable to find ~a label" (car (last i)))))
-	       (setf new-code (append new-code (list (append (nbutlast i) (list (- code-offset offset)))))))))
-	   (setf new-code (append new-code (list i)))))
+	       (setf new-code (append new-code (list (append (nbutlast i) (list (- code-offset offset))))))))
+	   (setf new-code (append new-code (list i))))))
     (values new-code)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -150,6 +163,7 @@
 (defmacro def-inst-type (name inst-layout)
   `(progn
      (defun ,name (stream instruction arguments enc)
+       (declare (optimize debug))
        (let ((code 0))
 	 ,(when (first inst-layout)
 		;; Generate the let for all the registers
