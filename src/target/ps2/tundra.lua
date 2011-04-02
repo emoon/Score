@@ -2,7 +2,15 @@
 local ps2_common = {
 
 	Env = {
-		PROGOPTS = "-T Shared/External/ps2sdk/ee/startup/linkfile"
+		PS2_ROOT = "c:/dev/ps2root",
+		LIBPATH = "$(PS2_ROOT)/ps2sce/sce/ee/lib",
+		CPPDEFS = { "PS2_SCE" },
+		CPPPATH = { "$(PS2_ROOT)/ps2dev/usr/local/ps2dev/ee/ee/include",
+					"$(PS2_ROOT)/ps2dev/usr/local/ps2dev/ee/ee/sys-include",
+					"$(PS2_ROOT)/ps2sce/sce/common/include",
+					"$(PS2_ROOT)/ps2sce/sce/ee/include" },
+
+		PROGOPTS = "-T $(PS2_ROOT)/ps2dev/usr/local/ps2dev/ee/startup/linkfile"
 	},
 
 	ReplaceEnv = {
