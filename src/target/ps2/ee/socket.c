@@ -21,6 +21,8 @@
 
 #endif 
 
+#include <stdio.h>
+
 #define MAX_SOCKETS 16
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -42,7 +44,7 @@ typedef struct Socket
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 static Socket s_sockets[MAX_SOCKETS];
-static uint32_t32_t s_socketCount = 0;
+static uint32_t s_socketCount = 0;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -60,7 +62,7 @@ Socket* Socket_createTcp(const Address* address)
 	int err = bind(socketHandle, saddr, size);
 	if (err != 0)
 	{
-		INFO("Unable to bind TcpSocket %d", err);
+		printf("Unable to bind TcpSocket %d\n", err);
 #if defined(PS2_SCE)
 		closesocket(socketHandle);
 #else
@@ -73,7 +75,7 @@ Socket* Socket_createTcp(const Address* address)
 	sock->address = *address;
 	sock->socket = socketHandle;
 
-	ASSERT(s_socketCount < MAX_SOCKETS);
+	//ASSERT(s_socketCount < MAX_SOCKETS);
 
 	return sock;
 }
@@ -177,7 +179,7 @@ Socket* Socket_accept(Socket* sock)
 	newSocket = &s_sockets[s_socketCount++];
 	newSocket->socket = s;
 
-	ASSERT(s_socketCount < MAX_SOCKETS);
+	//ASSERT(s_socketCount < MAX_SOCKETS);
 
 	return newSocket;
 }
@@ -224,8 +226,11 @@ int Socket_receive(Socket* sock, void* buffer, uint32_t length)
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-bool Socket_nameToAddressPort(Address* address, const char* hostname, uint16_t port)
+bool Socket_nameToAddressPort(Address** outAddress, const char* hostname, uint16_t port)
 {
+	static Address s_address;
+	Address* address = &s_address;
+	*outAddress = address;
 #if defined(PS2_SCE)		
 	struct sockaddr_in saddr;
 
