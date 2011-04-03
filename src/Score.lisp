@@ -1,13 +1,22 @@
-;;; This function will parse a whole score file to lists to be processed  
-;;; We might want to track line/similar things for better error reporting later
+
 
 (defparameter *mips-instructions* (make-hash-table :test #'eq))
+(defmacro make-ee-registers-hash (prefix)
+  (let ((hash (make-hash-table :test #'eq)))
+    (loop for i from 0 to 31 collecting (setf (gethash (intern (format nil "~S~d" prefix i)) hash) i)) hash))
+
+(defparameter *ee-registers* (make-ee-registers-hash R))
+(defparameter *fpu-registers* (make-ee-registers-hash F))
+(defparameter *register-type-lut* '(rs *ee-registers* rt *ee-registers* rd *ee-registers*
+                                    fs *fpu-registers* ft *fpu-registers* fd *fpu-registers*))
+
+;
 
 (defun read-score-file (filename)
   (with-open-file (stream filename)
     (let ((end (gensym "end")))
       (loop for i = (read stream nil end)
-	 while (not (eq i end)) collect i)))) 
+  		while (not (eq i end)) collect i)))) 
 
 ; test code
 
@@ -17,6 +26,24 @@
    			      (bne r0 loop-counter :loop)
    			      (addi r0 r0 0)
 			    (jr r31)))
+
+(defparameter *test-code-col* '(def-ee-fun set-col (temp)
+						       (lui color-reg #x1200)
+						       (ori color-reg color-reg #x00e0)
+						       (ori color r0 #xff)
+						       (sw color color-reg 0)  
+						       (jr r31)))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defun send-data (buffer length)
+  (declare (type (simple-array (unsigned-byte 8) (*)) buffer))
+  (let ((socket (usocket:socket-connect "192.168.0.8" 1339 :element-type '(unsigned-byte 8))))
+	(when socket
+      (loop for i from 0 to (- length 1) do
+	    (write-byte (aref buffer i) (usocket:socket-stream socket)))
+	  (force-output (usocket:socket-stream socket))
+	  (usocket:socket-close socket))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -33,8 +60,21 @@
                               :element-type '(unsigned-byte 8))
         (loop for i in (nthcdr 3 code) do
 	  (format t "~{~a~^, ~}~%" i)
-          (encode-ee-instruction stream i)))))
-
+          (encode-ee-instruction stream i))))
+  
+  ; read back the file 
+  (format t "test~%")
+  (with-open-file (stream "c:/temp/out.bin" :direction :input :element-type '(unsigned-byte 8))
+    (format t "test 2~%")
+    (let* ((length (file-length stream))
+	   (code (make-array length :element-type '(unsigned-byte 8) )))
+	   (format t "file size ~d~%" length)
+      (loop for i from 0 to (- length 1) do
+      	(format t "reading ~d~%" i)
+	    (setf (aref code i) (read-byte stream))) 
+      ; send the shit!
+	  (send-data code length))))
+      
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Compile a score function and output a binary blob
 ;;
@@ -126,15 +166,6 @@
 ;;;
 ;;; Loots of testing / hacking around currently
 ;;;
-
-(defmacro make-ee-registers-hash (prefix)
-  (let ((hash (make-hash-table :test #'eq)))
-    (loop for i from 0 to 31 collecting (setf (gethash (intern (format nil "~S~d" prefix i)) hash) i)) hash))
-
-(defparameter *ee-registers* (make-ee-registers-hash R))
-(defparameter *fpu-registers* (make-ee-registers-hash F))
-(defparameter *register-type-lut* '(rs *ee-registers* rt *ee-registers* rd *ee-registers*
-                                    fs *fpu-registers* ft *fpu-registers* fd *fpu-registers*))
 
 ;;; write value to the stream
 
