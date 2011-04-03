@@ -124,6 +124,11 @@ Socket* Socket_connect(const Address* address)
 	sock->address = *address;
 	sock->socket = socketHandle;
 
+	printf("connect\n");
+	printf("sock %x\n", sock);
+	printf("sock->socket %x\n", sock->socket);
+	printf("sock->address %x\n", sock->address);
+
 	if (s_socketCount >= MAX_SOCKETS)
 	{
 		printf("EE:out of max sockets\n");
@@ -179,6 +184,11 @@ Socket* Socket_accept(Socket* sock)
 	newSocket = &s_sockets[s_socketCount++];
 	newSocket->socket = s;
 
+	printf("accepted socket\n");
+	printf("newSocket %x\n", newSocket);
+	printf("newSocket->socket %x\n", newSocket->socket);
+	printf("s_socketCount %d\n", s_socketCount);
+
 	//ASSERT(s_socketCount < MAX_SOCKETS);
 
 	return newSocket;
@@ -210,6 +220,8 @@ bool Socket_send(Socket* sock, const void* buffer, uint32_t length)
 int Socket_receive(Socket* sock, void* buffer, uint32_t length)
 {
 	int readSize = recv(sock->socket, (char*)(buffer), length, 0);
+
+	printf("%d\n", sn_errno(sock->socket));
 
 	if (readSize >= 0)
 	{
