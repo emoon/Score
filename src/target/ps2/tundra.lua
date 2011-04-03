@@ -3,6 +3,7 @@ local ps2_common = {
 
 	Env = {
 		PS2_ROOT = "c:/dev/ps2root",
+		PS2_BIN = "$(PS2_ROOT)/ps2dev/usr/local/ps2dev/ee/bin",
 		LIBPATH = "$(PS2_ROOT)/ps2sce/sce/ee/lib",
 		CPPDEFS = { "PS2_SCE" },
 		CPPPATH = { "$(PS2_ROOT)/ps2dev/usr/local/ps2dev/ee/ee/include",
@@ -28,9 +29,9 @@ Build {
 				Tools = { "gcc" },
 				ReplaceEnv = {
 				PROGSUFFIX = ".elf",
-				CC = "ee-gcc",
-				AR = "ee-ar",
-				LD = "ee-gcc",
+				CC = "$(PS2_BIN)/ee-gcc",
+				AR = "$(PS2_BIN)/ee-ar",
+				LD = "$(PS2_BIN)/ee-gcc",
 			},
 		},	
 	},
