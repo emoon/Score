@@ -31,7 +31,7 @@
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-#define MAX_CONNECTIONS 16
+#define MAX_CONNECTIONS 8
 
 static struct Socket* s_listenSocket = 0;
 static struct Socket* s_clients[MAX_CONNECTIONS];
@@ -46,13 +46,13 @@ static bool Network_create()
 
 	if (sceSifLoadModule("host:modules/dev9.irx", 0, 0) < 0) 
 	{
-		ZENIC_INFO("dev9.irx cannot be loaded");
+		printf("dev9.irx cannot be loaded\n");
 		return false;
 	}
 
 	if ((sceSifLoadModule("host:modules/snstkrel.irx", 0, 0)) < 0) 
 	{
-		ZENIC_INFO("snstkdbg.irx cannot be loaded.\n");
+		printf("snstkdbg.irx cannot be loaded.\n");
 		return false;
 	}
 
@@ -60,7 +60,7 @@ static bool Network_create()
 
 	if (res != 0)
 	{
-		ZENIC_INFO("EE:sockAPIinit() failed %d", res);
+		printf("EE:sockAPIinit() failed %d\n", res);
 		return false;
 	}
 
@@ -68,19 +68,19 @@ static bool Network_create()
 
 	if (res != 0)
 	{
-		ZENIC_INFO("EE:sockAPIregthr() failed %d", res);
+		printf("EE:sockAPIregthr() failed %d\n", res);
 		return false;
 	}
 
-	if (sceSifLoadModule("host:modules/sndrv100.irx", 0, 0) < 0) 
+	if ((res = sceSifLoadModule("host:modules/sndrv100.irx", 0, 0)) < 0) 
 	{
-		ZENIC_INFO("sndrv100.irx cannot be loaded.");
+		printf("sndrv100.irx cannot be loaded %d\n", res);
 		return false;
 	}
 
-	if (sceSifLoadModule("host:modules/smap.irx", 0, 0) < 0) 
+	if ((res = sceSifLoadModule("host:modules/smap.irx", 0, 0)) < 0) 
 	{
-		ZENIC_INFO("smap.irx cannot be loaded");
+		printf("smap.irx cannot be loaded %d\n", res);
 		return false;
 	}
 
@@ -94,13 +94,13 @@ static bool Network_create()
 
         if (res != 0)
         {
-            ZENIC_INFO("EE:sndev_get_attached() failed %d", res);
+            printf("EE:sndev_get_attached() failed %d", res);
             return false;
         }
 
         if (deviceAttached == SN_DEV_TYPE_NONE)
         {
-            ZENIC_INFO("EE:Waiting for device to be ready\n");
+            printf("EE:Waiting for device to be ready\n");
             sn_delay(1000);
         }
     }
@@ -117,7 +117,7 @@ static bool Network_create()
 
 	if (res != 0)
 	{
-		ZENIC_INFO("EE:sndev_set_options(SN_DEV_SET_ETHER_IP) failed %d", res);
+		printf("EE:sndev_set_options(SN_DEV_SET_ETHER_IP) failed %d\n", res);
 		return false;
 	}
 
@@ -126,11 +126,11 @@ static bool Network_create()
   
     if (res != 0)
     {
-        ZENIC_INFO("EE:sn_stack_sate() failed %d", res);
+        printf("EE:sn_stack_sate() failed %d\n", res);
         return res;
     }
 
-    ZENIC_INFO("EE:Waiting for socket API to be readyn");
+    printf("EE:Waiting for socket API to be readyn\n");
     {
         while (sn_socket_api_ready() == SN_FALSE)
         {
@@ -143,13 +143,6 @@ static bool Network_create()
 #else
 	return false;
 #endif
-}
-
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-static void networkInit()
-{
-
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -167,7 +160,7 @@ bool ScoreConnection_create()
 
 	// Lookup
 
-	if (!Socket_nameToAddressPort(&address, "127.0.0.1", 1339))
+	if (!Socket_nameToAddressPort(&address, "192.168.0.8", 1339))
 	{
 		printf("Failed Socket_nameToAddressPort\n");
 		return false;
@@ -183,6 +176,8 @@ bool ScoreConnection_create()
 		return false;
 	}
 
+	printf("connection created 0x%x\n", sock);
+
 	Socket_setBlocking(sock, false);
 
 	s_listenSocket = sock;
@@ -192,9 +187,15 @@ bool ScoreConnection_create()
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+void (*runTest)(void);
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 void ScoreConnection_safePoint()
 {
     uint32_t i, count;
+
+    sn_delay(1000);
 
 	if (!s_listenSocket)
 		return;
@@ -205,24 +206,28 @@ void ScoreConnection_safePoint()
 
 		if (connection)
 		{
-			//sendCommands(connection);
+			printf("got connection!\n");
 			s_clients[s_clientCount++] = connection;
+			printf("connection %x\n", connection);
 		}
 	}
 
     for (i = 0, count = s_clientCount; i < count; ++i)
     {
         int size;
-        char buffer[1400];
+        static char s_buffer[1400] __attribute__ ((aligned (16)));
+        void (*foo)();
 
         struct Socket* client = s_clients[i];
+
+		printf("client %x i %d\n", client, i);
 
         if (!client)
             continue;
 
-        memset(buffer, 0, sizeof(buffer));
+        memset(s_buffer, 0, sizeof(s_buffer));
 
-        size = Socket_receive(client, buffer, sizeof(buffer));
+        size = Socket_receive(client, s_buffer, sizeof(s_buffer));
 
         if (size < 0)
         {
@@ -233,6 +238,11 @@ void ScoreConnection_safePoint()
 
         if (size <= 0)
             continue;
+
+        foo = (void*)&s_buffer[0];
+
+        FlushCache(0);
+        foo();
 
         // TODO: Handle the data here
 
