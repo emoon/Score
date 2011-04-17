@@ -89,7 +89,8 @@
 ;
 ;
 
-
+(defun file-pos-rel (stream start-pos offset)
+  (file-position stream (+ start-pos offset)))
 
 
 ;
@@ -135,11 +136,11 @@
   	(setf (symbol-table-other symtab) (read-byte stream))
   	(setf (symbol-table-shndx symtab) (read-half stream)) symtab))
 
-(defun read-symtable (stream offset size entsize)
+(defun read-symtable (stream file-offset offset size entsize)
   (declare (optimize (speed 0) (safety 3) (debug 3)))
 	(print entsize)
   (print offset)
-  (file-position stream offset)
+  (file-pos-rel stream file-offset offset)
   (let* ((sym-count (/ size entsize))
   		 (sym-tab (make-array sym-count)))
 	(loop for i from 0 below sym-count do
@@ -154,73 +155,79 @@
   (find-if #'(lambda (x) (string= (elf-section-name-string x) name)) sections))
 
 
-(defun read-section-data (stream sections name)
+(defun read-section-data (stream file-offset sections name)
   (let ((section (find-section sections name)))
   	(when section
-  	  (file-position stream (elf-section-offset section))
+  	  (file-pos-rel stream file-offset (elf-section-offset section))
   	  (setf (elf-section-data section) (make-array (elf-section-size section) :element-type 'unsigned-byte))
   	  (read-sequence (elf-section-data section) stream))))
 
-(defun elf-file-read (filename)
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defun elf-read-stream (file-offset stream)
   (declare (optimize (speed 0) (safety 3) (debug 3)))
 
-  (with-open-file (stream filename :element-type '(unsigned-byte 8))
-  	(let ((elf-file (make-elf-file))
-  		  (header (read-header stream)))
+  (let ((elf-file (make-elf-file))
+		(header (read-header stream)))
 
-  	  (setf (elf-file-header elf-file) header)
-  	  (file-position stream (elf-header-shoff header))
+	(pprint header)
 
-  	  ; read all sections
-  	 
-  	  (let ((sections (make-array (elf-header-shnum header) :element-type 'elf-section)))
-  	  	(loop for i from 0 below (elf-header-shnum header) do
-  	  	  (setf (aref sections i) (read-section-header stream)))
+	(setf (elf-file-header elf-file) header)
+	(file-pos-rel stream file-offset (elf-header-shoff header))
 
-		(setf (elf-file-sections elf-file) sections)
+	; read all sections
+	
+	(let ((sections (make-array (elf-header-shnum header) :element-type 'elf-section)))
+	(loop for i from 0 below (elf-header-shnum header) do
+		(setf (aref sections i) (read-section-header stream)))
 
-  	  	; resolve the names for the sections
-  	 
-		 (let ((symtab-section-offset (elf-section-offset (aref sections (elf-header-shstrndx header)))))
-  	  	   (loop for i from 0 below (elf-header-shnum header) do
-  	  	  	  ; set file-position to where the string is
-  	  	  	  (file-position stream (+ symtab-section-offset (elf-section-name (aref sections i))))
-  	  	  	  (setf (elf-section-name-string (aref sections i)) (read-null-terminated-ascii stream)))) 
+	(setf (elf-file-sections elf-file) sections)
 
-		; Setup the symbols table
+	; resolve the names for the sections
+	
+		(let ((symtab-section-offset (elf-section-offset (aref sections (elf-header-shstrndx header)))))
+		(loop for i from 0 below (elf-header-shnum header) do
+			; set file-position to where the string is
+			(file-pos-rel stream file-offset (+ symtab-section-offset (elf-section-name (aref sections i))))
+			(setf (elf-section-name-string (aref sections i)) (read-null-terminated-ascii stream)))) 
 
-		 (let ((symtab-section (find-section sections ".symtab")))
-		   (when symtab-section
-		  	 (setf (elf-file-symbol-table elf-file) (read-symtable stream (elf-section-offset symtab-section) 
- 		  														  		  (elf-section-size symtab-section)  
- 		  														  		  (elf-section-entsize symtab-section)))
-			; resolve the names
+	; Setup the symbols table
 
-			 (let ((symtab-section-offset (elf-section-offset (aref sections (elf-section-link symtab-section))))
-			  	   (symbol-table (elf-file-symbol-table elf-file))
-			   	   (symbol-hash (make-hash-table)))
-			   (loop for i from 0 below (length symbol-table) do
-				 (file-position stream (+ symtab-section-offset (symbol-table-name (aref symbol-table i))))
-				 (setf (symbol-table-name-string (aref symbol-table i)) (read-null-terminated-ascii stream)))
+		(let ((symtab-section (find-section sections ".symtab")))
+		(when symtab-section
+			(setf (elf-file-symbol-table elf-file) (read-symtable stream file-offset
+																		(elf-section-offset symtab-section) 
+																		(elf-section-size symtab-section)  
+																		(elf-section-entsize symtab-section)))
+		; resolve the names
 
-			 	; create a hash-table with function mappings
-		  
-				(loop for i from 0 below (length symbol-table) do
-				  (when (eq (logand (symbol-table-info (aref symbol-table i)) #xf) 2)
-				    (setf (gethash (symbol-table-name-string (aref symbol-table i)) symbol-hash) 
-				    	  									 (symbol-table-value (aref symbol-table i)))))
+			(let ((symtab-section-offset (elf-section-offset (aref sections (elf-section-link symtab-section))))
+				(symbol-table (elf-file-symbol-table elf-file))
+				(symbol-hash (make-hash-table)))
+			(loop for i from 0 below (length symbol-table) do
+				(file-pos-rel stream file-offset (+ symtab-section-offset (symbol-table-name (aref symbol-table i))))
+				(setf (symbol-table-name-string (aref symbol-table i)) (read-null-terminated-ascii stream)))
 
-				(setf (elf-file-function-table elf-file) symbol-hash))
+			; create a hash-table with function mappings
 		
-		     ; read the data's to the sections that needs it
+			(loop for i from 0 below (length symbol-table) do
+				(when (eq (logand (symbol-table-info (aref symbol-table i)) #xf) 2)
+				(setf (gethash (symbol-table-name-string (aref symbol-table i)) symbol-hash) 
+															(symbol-table-value (aref symbol-table i)))))
 
-		     (read-section-data stream sections ".text")
-		     (read-section-data stream sections ".data")
-		     (read-section-data stream sections ".rodata")))) elf-file))) 
+			(setf (elf-file-function-table elf-file) symbol-hash))
+	
+			; read the data's to the sections that needs it
 
+			(read-section-data stream file-offset sections ".text")
+			(read-section-data stream file-offset sections ".data")
+			(read-section-data stream file-offset sections ".rodata")))) elf-file)) 
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-
+(defun elf-file-read (filename)
+  (with-open-file (stream filename :element-type '(unsigned-byte 8))
+  	(elf-read-stream 0 stream)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Archiver Reader
@@ -250,7 +257,10 @@
   	(setf (archive-header-gid header) (read-seq stream 6))
   	(setf (archive-header-mode header) (read-seq stream 8))
   	(setf (archive-header-size header) (parse-integer (read-string stream 10)))
-  	(setf (archive-header-fmag header) (read-string stream 2)) header))
+  	(setf (archive-header-fmag header) (read-string stream 2)) 
+  	; adjust size
+  	(setf (archive-header-size header) (logand (+ (archive-header-size header) 1) (lognot 1)))
+  	header))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -277,7 +287,7 @@
 
 		(let ((current-pos (file-position stream)))
 		  (unless (eq (search "/ " (archive-header-name temp)) 0)
-		  	(pprint (elf-file-read stream)))
+		  	(elf-read-stream current-pos stream))
 
 	   	  ; search to next entry
 	   	 
