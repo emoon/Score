@@ -58,15 +58,12 @@
 ;
 ;
 
+
 (defun read-string (stream length)
   (let ((string (make-string length)))
     (dotimes (i length)
       (setf (char string i) (code-char (read-byte stream))))
     string))
-
-;
-;
-;
 
 (defun read-half (stream)
   (let* ((l (read-byte stream))
@@ -82,16 +79,18 @@
 (defun read-off (stream) (read-word stream))
 (defun read-addr (stream) (read-word stream))
 
-;
-;
-;
-;
-
-
 (defun read-null-terminated-ascii (in)
   (with-output-to-string (s)
     (loop for char = (code-char (read-byte in))
       until (char= char +null+) do (write-char char s))))
+
+;
+;
+;
+;
+
+
+
 
 ;
 ;
@@ -162,10 +161,10 @@
   	  (setf (elf-section-data section) (make-array (elf-section-size section) :element-type 'unsigned-byte))
   	  (read-sequence (elf-section-data section) stream))))
 
-(defun read-elf-file ()
+(defun elf-file-read (filename)
   (declare (optimize (speed 0) (safety 3) (debug 3)))
 
-  (with-open-file (stream "c:/temp2/score_connection.o" :element-type '(unsigned-byte 8))
+  (with-open-file (stream filename :element-type '(unsigned-byte 8))
   	(let ((elf-file (make-elf-file))
   		  (header (read-header stream)))
 
@@ -218,4 +217,70 @@
 		     (read-section-data stream sections ".text")
 		     (read-section-data stream sections ".data")
 		     (read-section-data stream sections ".rodata")))) elf-file))) 
+
+
+
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; Archiver Reader
+
+(defstruct archive-header
+  name
+  date
+  uid
+  gid
+  mode
+  size
+  fmag)
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defun read-seq (stream length)
+  (let ((temp (make-array length :element-type 'unsigned-byte)))
+    (read-sequence temp stream)))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defun archive-header-read (stream)
+  (let ((header (make-archive-header)))
+  	(setf (archive-header-name header) (read-string stream 16))
+  	(setf (archive-header-date header) (parse-integer (read-string stream 12)))
+  	(setf (archive-header-uid header) (read-seq stream 6))
+  	(setf (archive-header-gid header) (read-seq stream 6))
+  	(setf (archive-header-mode header) (read-seq stream 8))
+  	(setf (archive-header-size header) (parse-integer (read-string stream 10)))
+  	(setf (archive-header-fmag header) (read-string stream 2)) header))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defun archive-read-file ()
+  (declare (optimize (speed 0) (safety 3) (debug 3)))
+  (with-open-file (stream "c:/temp2/Libc.a" :element-type '(unsigned-byte 8))
+
+	; Make sure we have the correct header
+
+	(let ((header-string (read-string stream 8)))
+	  (unless (search "!<arch>" header-string)
+	  	(return-from archive-read-file nil))
+
+	; scan for files 
+
+	(loop for i from 0 to 1000000 do
+	  (let ((temp (archive-header-read stream)))
+	    (unless (search "`" (archive-header-fmag temp))
+	   	  (return-from archive-read-file))
+
+		(pprint temp)
+
+	   	; parse elf file 
+
+		(let ((current-pos (file-position stream)))
+		  (unless (eq (search "/ " (archive-header-name temp)) 0)
+		  	(pprint (elf-file-read stream)))
+
+	   	  ; search to next entry
+	   	 
+		  (file-position stream (+ current-pos (archive-header-size temp)))))))))
+
 
